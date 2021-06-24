@@ -110,4 +110,6 @@ const extension: IRenderMime.IExtension = {
   dataType: 'json'
 };
 
+console.log('jupyterlab-notify render activated');
+
 export default extension;

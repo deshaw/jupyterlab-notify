@@ -73,6 +73,7 @@ time.sleep(1)
 If you notice that the desktop notifications are not showing up, check the below:
 1. Make sure JupyterLab is running in a secure context (i.e. either using HTTPS or localhost)
 2. If you've previously denied notification permissions for the site, update the browser settings accordingly. In Chrome, you can do so by navigating to `Setttings -> Privacy and security -> Site Settings -> Notifications` and updating the permissions against your JupyterLab URL.
+3. Verify that notifications work for your browser. You may need to configure an OS setting first. You can test on [this site](https://web-push-book.gauntface.com/demos/notification-examples/).
 
 ## Requirements
 
