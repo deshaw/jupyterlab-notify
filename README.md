@@ -1,5 +1,9 @@
 # jupyterlab-notify
 
+
+[![PyPI version][pypi-image]][pypi-url] [![PyPI DM][pypi-dm-image]][pypi-url]
+[![Github Actions Status][github-status-image]][github-status-url] [![Binder][binder-image]][binder-url]
+
 JupyterLab extension to notify cell completion
 
 ![notify-extension-in-action](https://github.com/deshaw/jupyterlab-notify/blob/main/docs/notify-screenshot.png?raw=true)
@@ -194,4 +198,4 @@ This project is released under a [BSD-3-Clause license](https://github.com/desha
 [github-status-image]: https://github.com/deshaw/jupyterlab-notify/workflows/Build/badge.svg
 [github-status-url]: https://github.com/deshaw/jupyterlab-notify/actions?query=workflow%3ABuild
 [binder-image]: https://mybinder.org/badge_logo.svg
-[binder-url]: https://mybinder.org/v2/gh/deshaw/jupyterlab-notify.git/master?urlpath=lab%2Ftree%2Fnotebooks%2Findex.ipynb
+[binder-url]: https://mybinder.org/v2/gh/deshaw/jupyterlab-notify.git/main?urlpath=lab%2Ftree%2Fnotebooks%2Findex.ipynb
