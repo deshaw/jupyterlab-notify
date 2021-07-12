@@ -4,13 +4,14 @@ jupyterlab_notify setup
 import json
 from pathlib import Path
 import setuptools
+from jupyter_packaging import wrap_installers, npm_builder, get_data_files
 
 HERE = Path(__file__).parent.resolve()
 
 # The name of the project
 name = "jupyterlab_notify"
 
-lab_path = (HERE / name / "labextension")
+lab_path = HERE / name.replace("-", "_") / "labextension"
 
 # Representative files that should exist after a successful build
 ensured_targets = [
@@ -20,9 +21,13 @@ ensured_targets = [
 labext_name = "jupyterlab-notify"
 
 data_files_spec = [
-    ("share/jupyter/labextensions/%s" % labext_name, str(lab_path), "**"),
-    ("share/jupyter/labextensions/%s" % labext_name, str(HERE), "install.json"),("etc/jupyter/jupyter_server_config.d",
-     "jupyter-config", "jupyterlab_notify.json"),
+    (
+        "share/jupyter/labextensions/%s" % labext_name,
+        str(lab_path.relative_to(HERE)),
+        "**",
+    ),
+    ("share/jupyter/labextensions/%s" % labext_name, str("."), "install.json"),
+    ("etc/jupyter/jupyter_server_config.d", "jupyter-config", "jupyterlab_notify.json"),
 ]
 
 long_description = (HERE / "README.md").read_text()
@@ -58,19 +63,14 @@ setup_args = dict(
     ],
 )
 
-try:
-    from jupyter_packaging import (
-        wrap_installers,
-        npm_builder,
-        get_data_files
-    )
-    post_develop = npm_builder(
-        build_cmd="install:extension", source_dir="src", build_dir=lab_path
-    )
-    setup_args['cmdclass'] = wrap_installers(post_develop=post_develop, ensured_targets=ensured_targets)
-    setup_args['data_files'] = get_data_files(data_files_spec)
-except ImportError as e:
-    pass
+
+post_develop = npm_builder(
+    build_cmd="install:extension", source_dir="src", build_dir=lab_path
+)
+setup_args["cmdclass"] = wrap_installers(
+    post_develop=post_develop, ensured_targets=ensured_targets
+)
+setup_args["data_files"] = get_data_files(data_files_spec)
 
 if __name__ == "__main__":
     setuptools.setup(**setup_args)

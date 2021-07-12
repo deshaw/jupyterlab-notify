@@ -1,4 +1,4 @@
-## [1.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v1.0.0...v1.0.0) (2021-06-24)
+## [1.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v1.0.0...v1.0.0) (2021-07-12)
 
 ### Added
 
