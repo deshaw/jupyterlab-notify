@@ -11,7 +11,7 @@ const MIME_TYPE = 'application/desktop-notify+json';
 const PROCESSED_KEY = 'isProcessed';
 // The below can be used to customize notifications
 const NOTIFICATION_OPTIONS = {
-  icon: '/static/favicons/favicon.ico'
+  icon: '/static/favicons/favicon.ico',
 };
 
 interface INotifyMimeData {
@@ -31,7 +31,7 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
   }
 
   renderModel(model: IRenderMime.IMimeModel): Promise<void> {
-    const mimeData = (model.data[this._mimeType] as unknown) as INotifyMimeData;
+    const mimeData = model.data[this._mimeType] as unknown as INotifyMimeData;
 
     const payload = mimeData.payload as JSONObject;
 
@@ -50,7 +50,7 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
       // handle only the errors (if any)
       Notification.requestPermission().catch(err => {
         alert(
-          `Encountered error - ${err} while requesting permissions for notebook notifications`
+          `Encountered error - ${err} while requesting permissions for notebook notifications`,
         );
       });
     }
@@ -67,11 +67,11 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
     if (!mimeData[PROCESSED_KEY]) {
       // Add isProcessed property to each notification message so that we can avoid repeating notifications on page reloads
       const updatedModel: IRenderMime.IMimeModel = JSON.parse(
-        JSON.stringify(model)
+        JSON.stringify(model),
       );
-      const updatedMimeData = (updatedModel.data[
+      const updatedMimeData = updatedModel.data[
         this._mimeType
-      ] as unknown) as INotifyMimeData;
+      ] as unknown as INotifyMimeData;
       updatedMimeData[PROCESSED_KEY] = true;
       // The below model update is done inside a separate function and added to
       // the event queue - this is done so to avoid re-rendering before the
@@ -97,7 +97,7 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
 const rendererFactory: IRenderMime.IRendererFactory = {
   safe: true,
   mimeTypes: [MIME_TYPE],
-  createRenderer: options => new OutputWidget(options)
+  createRenderer: options => new OutputWidget(options),
 };
 
 /**
@@ -107,7 +107,7 @@ const extension: IRenderMime.IExtension = {
   id: 'desktop-notify:plugin',
   rendererFactory,
   rank: 0,
-  dataType: 'json'
+  dataType: 'json',
 };
 
 console.log('jupyterlab-notify render activated');

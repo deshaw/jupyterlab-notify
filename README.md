@@ -1,6 +1,5 @@
 # jupyterlab-notify
 
-
 [![PyPI version][pypi-image]][pypi-url] [![PyPI DM][pypi-dm-image]][pypi-url]
 [![Github Actions Status][github-status-image]][github-status-url] [![Binder][binder-image]][binder-url]
 
@@ -19,6 +18,7 @@ This is inspired by the notebook version [here](https://github.com/ShopRunner/ju
 ```
 
 ### Notify completion of single cell:
+
 ```python
 %%notify
 import time
@@ -36,18 +36,21 @@ time.sleep(1)
 In case this assumption does not hold true for you, please open an issue with relevant details.
 
 ### Failure scenarios
+
 ```python
 %%notify -f 'Long-running cell in <foo> notebook failed'
 raise ValueError
 ```
 
 ### Threshold-based notifications (unit in seconds)
+
 ```python
 %notify_all --threshold 1
 time.sleep(1)
 ```
 
 Once enabled, `notify_all` will raise a notification for cells that either exceed the given threshold or raise exception. This ability can also be used to check if/when all cells in a notebook completes execution. For instance,
+
 ```python
 # In first cell
 %notify_all -t 86400 -f 'Notebook execution failed'
@@ -58,12 +61,14 @@ Once enabled, `notify_all` will raise a notification for cells that either excee
 ```
 
 ### Disable notifications
+
 ```python
 %notify_all --disable
 time.sleep(1)
 ```
 
 ### Learn more
+
 ```python
 %%notify?
 ```
@@ -75,13 +80,14 @@ time.sleep(1)
 ## Troubleshoot
 
 If you notice that the desktop notifications are not showing up, check the below:
+
 1. Make sure JupyterLab is running in a secure context (i.e. either using HTTPS or localhost)
 2. If you've previously denied notification permissions for the site, update the browser settings accordingly. In Chrome, you can do so by navigating to `Setttings -> Privacy and security -> Site Settings -> Notifications` and updating the permissions against your JupyterLab URL.
 3. Verify that notifications work for your browser. You may need to configure an OS setting first. You can test on [this site](https://web-push-book.gauntface.com/demos/notification-examples/).
 
 ## Requirements
 
-* JupyterLab >= 3.0
+- JupyterLab >= 4.0
 
 ## Install
 
@@ -174,7 +180,6 @@ twine upload dist/*
 ```bash
 pip uninstall jupyterlab_notify
 ```
-
 
 ## History
 
