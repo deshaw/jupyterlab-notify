@@ -212,7 +212,7 @@ class NotifyCellCompletionMagics(Magics):
         if self._post_run_cell not in ip.events.callbacks["post_run_cell"]:
             ip.events.register("post_run_cell", self._post_run_cell)
 
-    def _pre_run_cell(self):
+    def _pre_run_cell(self, info):
         self.run_start_time = time.time()
 
     def _post_run_cell(self, exec_result):
