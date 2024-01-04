@@ -1,3 +1,16 @@
+## [2.0.1](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.1...v2.0.0) (UNRELEASED)
+
+## Fixed
+
+- Fix the pre run cell hook to be compatible with ipython 8.18.x+
+
+
+## [2.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.0...v1.0.0) (2023-05-17)
+
+## Changed
+
+- Upgrade to jupyterlab4
+
 ## [1.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v1.0.0...v1.0.0) (2021-07-12)
 
 ### Added
