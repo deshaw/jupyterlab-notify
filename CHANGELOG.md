@@ -4,7 +4,6 @@
 
 - Fix the pre run cell hook to be compatible with ipython 8.18.x+
 
-
 ## [2.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.0...v1.0.0) (2023-05-17)
 
 ## Changed
