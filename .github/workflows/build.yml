@@ -47,7 +47,7 @@ jobs:
         pip uninstall -y "jupyterlab_notify" jupyterlab
 
     - name: Upload extension packages
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: extension-artifacts
         path: dist/jupyterlab_notify*
