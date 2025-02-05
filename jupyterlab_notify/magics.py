@@ -1,9 +1,10 @@
 import time
 import uuid
-import smtplib
 from email.message import EmailMessage
 from enum import Enum
 from getpass import getuser
+from traitlets import Any, Unicode, Instance
+from importlib import import_module
 
 from IPython import get_ipython
 from IPython.core.magic import Magics, cell_magic, line_magic, magics_class
@@ -55,10 +56,56 @@ class _Notification(object):
 
 @magics_class
 class NotifyCellCompletionMagics(Magics):
+    smtp_class: str = Unicode(
+        "smtplib.SMTP",
+        config=True,
+        help="Fully qualified class name for the SMTP class to use",
+    )
+    smtp_args: str = Any(
+        "localhost",
+        config=True,
+        help="Arguments to pass to the SMTP class constructor, as a string",
+    )
+
     def __init__(self, shell):
         super(NotifyCellCompletionMagics, self).__init__(shell)
+        self.smpt_instace = None
+        self._create_smtp_instance()
         # Init message prompts the user for required permissions to display desktop notifications
         display(_Notification(_NotificationType.INIT))
+
+    def _create_smtp_instance(self):
+        module_name, class_name = self.smtp_class.rsplit(".", 1)
+        module = import_module(module_name)
+        smtp_class = getattr(module, class_name)
+
+        args = self._process_smtp_args()
+
+        if isinstance(args, dict):
+            self.smtp_instance = smtp_class(**args)
+        elif isinstance(args, (list, tuple)):
+            self.smtp_instance = smtp_class(*args)
+        else:
+            self.smtp_instance = smtp_class()
+
+    def _process_smtp_args(self):
+        if self.smtp_args is None:
+            return []
+
+        if isinstance(self.smtp_args, str):
+            # If it's a string, try to evaluate it as a Python expression
+            try:
+                import ast
+
+                return ast.literal_eval(self.smtp_args)
+            except:
+                return self.smtp_args
+        elif callable(self.smtp_args):
+            # If it's callable, execute it
+            return self.smtp_args()
+        else:
+            # For other types (tuple, list, dict), return as is
+            return self.smtp_args
 
     @magic_arguments()
     @argument(
@@ -128,9 +175,7 @@ class NotifyCellCompletionMagics(Magics):
             # related args from the user to open a session with the target
             # SMTP server (in NotifyCellCompletionMagics initializer) / provide
             # hooks for users to plugin their implementations of mail
-            with smtplib.SMTP("localhost") as smtp_conn:
-                smtp_conn.send_message(message)
-
+            self.smtp_instance.send_message(message)
         else:
             display(_Notification(_NotificationType.NOTIFY, title))
 
