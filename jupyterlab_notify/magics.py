@@ -1,15 +1,19 @@
+from   email.message            import EmailMessage
+from   enum                     import Enum
+from   getpass                  import getuser
+from   importlib                import import_module
+import inspect
 import time
+from   traitlets                import Any, Unicode
 import uuid
-from email.message import EmailMessage
-from enum import Enum
-from getpass import getuser
-from traitlets import Any, Unicode, Instance
-from importlib import import_module
 
-from IPython import get_ipython
-from IPython.core.magic import Magics, cell_magic, line_magic, magics_class
-from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
-from IPython.display import display
+from   IPython                  import get_ipython
+from   IPython.core.magic       import (Magics, cell_magic, line_magic,
+                                        magics_class)
+from   IPython.core.magic_arguments \
+                                import (argument, magic_arguments,
+                                        parse_argstring)
+from   IPython.display          import display
 
 
 _DEFAULT_SUCCESS_MESSAGE = "Cell execution completed successfully"
@@ -54,6 +58,10 @@ class _Notification(object):
         }
 
 
+class SMTPConfigurationError(Exception):
+    pass
+
+
 @magics_class
 class NotifyCellCompletionMagics(Magics):
     smtp_class: str = Unicode(
@@ -69,31 +77,79 @@ class NotifyCellCompletionMagics(Magics):
 
     def __init__(self, shell):
         super(NotifyCellCompletionMagics, self).__init__(shell)
-        self.smpt_instace = None
-        self._create_smtp_instance()
-        # Init message prompts the user for required permissions to display desktop notifications
+        self.smtp_instance = None
+        self._setup_smtp_instance()
         display(_Notification(_NotificationType.INIT))
 
-    def _create_smtp_instance(self):
-        module_name, class_name = self.smtp_class.rsplit(".", 1)
-        module = import_module(module_name)
-        smtp_class = getattr(module, class_name)
+    def _setup_smtp_instance(self):
+        try:
+            smtp_class = self._import_smtp_class()
+            self._validate_smtp_class(smtp_class)
+            self.smtp_instance = self._create_smtp_instance(smtp_class)
+            self._validate_smtp_instance(self.smtp_instance)
+        except SMTPConfigurationError as e:
+            print(f"SMTP Configuration Error: {str(e)}")
 
+    def _import_smtp_class(self):
+        try:
+            module_name, class_name = self.smtp_class.rsplit(".", 1)
+        except ValueError:
+            raise SMTPConfigurationError(
+                f"Invalid smtp_class format: {self.smtp_class}. "
+                "It should be in the format 'module.ClassName'."
+            )
+
+        try:
+            module = import_module(module_name)
+        except ImportError:
+            raise SMTPConfigurationError(f"Could not import module: {module_name}")
+
+        try:
+            return getattr(module, class_name)
+        except AttributeError:
+            raise SMTPConfigurationError(
+                f"Class {class_name} not found in module {module_name}"
+            )
+
+    def _validate_smtp_class(self, smtp_class):
+        if not inspect.isclass(smtp_class):
+            raise SMTPConfigurationError(f"{smtp_class.__name__} is not a class")
+
+        if not hasattr(smtp_class, "send_message") or not callable(
+            getattr(smtp_class, "send_message")
+        ):
+            raise SMTPConfigurationError(
+                f"{smtp_class.__name__} does not have a callable 'send_message' method"
+            )
+
+    def _create_smtp_instance(self, smtp_class):
         args = self._process_smtp_args()
 
-        if isinstance(args, dict):
-            self.smtp_instance = smtp_class(**args)
-        elif isinstance(args, (list, tuple)):
-            self.smtp_instance = smtp_class(*args)
-        else:
-            self.smtp_instance = smtp_class()
+        try:
+            if isinstance(args, dict):
+                return smtp_class(**args)
+            elif isinstance(args, (list, tuple)):
+                return smtp_class(*args)
+            else:
+                return smtp_class()
+        except Exception as e:
+            raise SMTPConfigurationError(
+                f"Failed to instantiate {smtp_class.__name__}: {str(e)}"
+            )
+
+    def _validate_smtp_instance(self, smtp_instance):
+        if not hasattr(smtp_instance, "connect") or not callable(
+            getattr(smtp_instance, "connect")
+        ):
+            raise SMTPConfigurationError(
+                f"{type(smtp_instance).__name__} instance does not have a callable 'connect' method"
+            )
 
     def _process_smtp_args(self):
         if self.smtp_args is None:
             return []
 
         if isinstance(self.smtp_args, str):
-            # If it's a string, try to evaluate it as a Python expression
             try:
                 import ast
 
@@ -101,10 +157,8 @@ class NotifyCellCompletionMagics(Magics):
             except:
                 return self.smtp_args
         elif callable(self.smtp_args):
-            # If it's callable, execute it
             return self.smtp_args()
         else:
-            # For other types (tuple, list, dict), return as is
             return self.smtp_args
 
     @magic_arguments()
