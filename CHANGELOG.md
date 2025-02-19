@@ -1,3 +1,9 @@
+## [2.0.2](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.2...v2.0.1) (UNRELEASED)
+
+## Changed
+
+- Added options to configure the SMTP client to use
+
 ## [2.0.1](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.1...v2.0.0) (2024-01-16)
 
 ## Fixed
