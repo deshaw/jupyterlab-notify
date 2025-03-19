@@ -9,15 +9,16 @@ JupyterLab extension to notify cell completion
 
 The `jupyterlab-notify` extension allows you to receive notifications about cell execution results in JupyterLab. Notifications are configured through cell metadata or the JupyterLab interface, providing seamless integration and easier management of notification preferences. Notifications can be sent via desktop pop-ups, Slack messages, or emails, depending on your configuration.
 
-**Important Note**: JupyterLab Notify v2 supports `jupyter-server-nbmodel`(>= v0.1.1a2), enabling notifications to work even after the browser is closed. To enable browser-less notification support, install it with:
-
-```bash
-pip install jupyter-server-nbmodel
-```
+> [!NOTE]
+> JupyterLab Notify v2 supports `jupyter-server-nbmodel`(>= v0.1.1a2), enabling notifications to work even after the browser has been closed. To enable browser-less notification support, install JupyterLab Notify with server-side execution dependencies using:
+>
+> ```bash
+> pip install jupyterlab-notify[server-side-execution]
+> ```
 
 ### Configuration
 
-To enable Slack and email notifications, create a configuration file at `~/.jupyter/jupyterlab_notify_config.json` with the following format:
+To enable Slack and email notifications, create a `jupyterlab_notify_config.json` configuration file under a path listed in `jupyter --paths` config section (e.g. `~/.jupyter/jupyterlab_notify_config.json`) with the following format:
 
 ```json
 {
@@ -27,33 +28,31 @@ To enable Slack and email notifications, create a configuration file at `~/.jupy
 }
 ```
 
-- `slack_token`: A valid Slack bot token with `chat:write` permissions. Refer [this article](https://help.thebotplatform.com/en/articles/7233667-how-to-create-a-slack-bot) to create your own slack bot
+- `slack_token`: A valid Slack bot token with `chat:write` permissions. Refer [this article](https://api.slack.com/quickstart) to create your own slack bot
 - `slack_channel_name`: The Slack channel to post notifications to.
 - `email`: The email address to receive notifications. Refer [this article](https://mailtrap.io/blog/setup-smtp-server/) to setup SMTP server.
-
-**Note:** Ensure your JupyterLab server has SMTP access for email notifications (configured separately).
 
 ### Notification Modes
 
 You can control when notifications are sent by setting a mode for each cell. Modes can be configured through the JupyterLab interface by clicking on the bell icon in the cell toolbar.
 
-![image](https://github.com/user-attachments/assets/b384c0ee-88d0-47e8-9825-e42becf657a7)
+![image](https://github.com/user-attachments/assets/52c0f81a-fdf3-4840-b168-4c067b2b1251)
 
 **Supported modes include:**
 
-- `always`: Sends a notification every time a cell finishes executing.
+- `default`: Notification is sent only if cell execution exceeds the threshold time (default: 30 seconds). No notification if execution time is below the threshold.
 - `never`: Disables notifications for the cell.
-- `on-error`: Sends a notification only if the cell - execution fails with an error.
-- `global-timeout`: Sends a notification if the cell execution exceeds a globally configured timeout.
-- `custom-timeout`: Sends a notification if the cell execution exceeds a timeout specified for that cell.
+- `on-error`: Sends a notification only if the cell execution fails with an error.
+- `custom-timeout`: Sends a notification as soon as the cell-execution exceeds a timeout value specified in settings.
 
-### Global And Custom Timeout
+### Default Threshold And Custom Timeout
 
-Configure the global and custom timeout value in JupyterLab’s settings:
+Configure the default threshold and custom timeout value in JupyterLab’s settings:
 
 1. Go to Settings Editor.
 2. Select notify.
-3. Set "globalTimeout": 30 (in seconds) to apply to cells using the global-timeout mode.
+3. Set "Default Threshold": 30 (in seconds) to apply to cells using the `default` mode.
+4. Set "Custom Timeout": 60 (in seconds) to apply to cells using the `custom-timeout` mode.
 
 ### Desktop Notifications
 
@@ -180,6 +179,8 @@ pip uninstall jupyterlab_notify
 ```
 
 ## History
+
+The initial version of this extension was inspired by the notebook version [here](https://github.com/ShopRunner/jupyter-notify).
 
 This plugin was contributed back to the community by the [D. E. Shaw group](https://www.deshaw.com/).
 

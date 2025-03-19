@@ -5,26 +5,36 @@ from traitlets.config import Configurable
 from traitlets import Unicode, default, Any
 from importlib import import_module
 import inspect
-from pydantic import BaseModel, Field
-from typing import Optional
+from dataclasses import dataclass, fields
+from typing import Optional, Dict
 from threading import Timer
 
 
-class NotificationParams(BaseModel):
+@dataclass
+class NotificationParams:
     cell_id: str
     mode: str
-    slack: bool = Field(alias="slackEnabled")
-    email: bool = Field(alias="emailEnabled")
-    success_message: str = Field(alias="successMessage")
-    failure_message: str = Field(alias="failureMessage")
+    slackEnabled: bool
+    emailEnabled: bool
+    successMessage: str
+    failureMessage: str
     threshold: int
-    error: Optional[str] = Field(default=None)
-    success: Optional[bool] = Field(default=False)
-    timer: Optional[Timer] = Field(default=None)
+    error: Optional[str] = None
+    success: Optional[bool] = False
+    timer: Optional[Timer] = None
+    start_time: Optional[str] = None
 
-    class Config:
-        extra = "ignore"  # Ignores any extra fields in the request body
-        arbitrary_types_allowed = True  # For allowing timer
+
+def notification_params_from_dict(data: Dict[str, Any]) -> NotificationParams:
+    """Convert JSON data to NotificationParams."""
+
+    # Get valid field names from NotificationParams
+    allowed_fields = {f.name for f in fields(NotificationParams)}
+
+    # Filter out unexpected fields
+    filtered_data = {k: v for k, v in data.items() if k in allowed_fields}
+
+    return NotificationParams(**filtered_data)
 
 
 class SMTPConfigurationError(Exception):
@@ -39,7 +49,7 @@ class NotificationConfig(Configurable):
     )
 
     smtp_args: str = Any(
-        ["localhost", 1025],
+        ["localhost"],
         config=True,
         help="Arguments to pass to the SMTP class constructor, as a string",
     )
@@ -167,10 +177,11 @@ class NotificationConfig(Configurable):
             return self.smtp_args
 
     def _load_from_file(self, key):
-        config_path = Path.home() / ".jupyter/jupyterlab_notify_config.json"
+        config_path = Path.home() / r".jupyter/jupyterlab_notify_config.json"
         try:
             with open(config_path, "r") as f:
                 config = json.load(f)
                 return config.get(key)
         except (FileNotFoundError, json.JSONDecodeError):
+            print("File not found!")
             return None

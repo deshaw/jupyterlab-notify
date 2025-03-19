@@ -8,6 +8,10 @@
       {
         "name": "notify",
         "command": "notify:toggle-cell-notifications"
+      },
+      {
+        "name": "notifyMenu",
+        "rank": 100
       }
     ]
   },
@@ -16,20 +20,21 @@
       "title": "Default mode",
       "description": "The default mode for notification",
       "type": "string",
-      "enum": [
-        "never",
-        "always",
-        "on-error",
-        "global-timeout",
-        "custom-timeout"
-      ],
-      "default": "never"
+      "enum": ["default", "never", "on-error", "custom-timeout"],
+      "default": "default"
     },
-    "threshold": {
-      "title": "Threshold",
+    "defaultThreshold": {
+      "title": "Threshold for default notification",
+      "description": "Default threshold value (unit in seconds)",
+      "type": ["number", "null"],
+      "default": 30,
+      "minimum": 0
+    },
+    "customThreshold": {
+      "title": "Threshold for custom-timeout notification",
       "description": "Threshold-based notifications (unit in seconds)",
       "type": ["number", "null"],
-      "default": null,
+      "default": 60,
       "minimum": 0
     },
     "successMessage": {

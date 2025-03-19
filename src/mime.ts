@@ -66,13 +66,8 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
 
     if (!mimeData[PROCESSED_KEY]) {
       // Add isProcessed property to each notification message so that we can avoid repeating notifications on page reloads
-      const updatedModel: IRenderMime.IMimeModel = JSON.parse(
-        JSON.stringify(model),
-      );
-      const updatedMimeData = updatedModel.data[
-        this._mimeType
-      ] as unknown as INotifyMimeData;
-      updatedMimeData[PROCESSED_KEY] = true;
+      const updatedMimeData = { ...mimeData, [PROCESSED_KEY]: true };
+      const newData = { ...model.data, [this._mimeType]: updatedMimeData };
       // The below model update is done inside a separate function and added to
       // the event queue - this is done so to avoid re-rendering before the
       // initial render is complete.
@@ -81,7 +76,7 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
       // registered on model-updates that re-renders the widget and it again tries
       // to update the model which again causes a re-render and so on.
       setTimeout(() => {
-        model.setData(updatedModel);
+        model.setData(newData);
       }, 0);
     }
 

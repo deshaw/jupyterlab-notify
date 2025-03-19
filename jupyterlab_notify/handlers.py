@@ -8,7 +8,7 @@ import tornado.web
 from jupyter_server.base.handlers import JupyterHandler
 from jupyter_server.extension.handler import ExtensionHandlerMixin
 
-from .config import NotificationParams
+from .config import NotificationParams, notification_params_from_dict
 
 
 def setup_logger(name: str) -> logging.Logger:
@@ -51,7 +51,10 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
                 or self.extension_app.slack_channel_name
             )
         )
-        email_configured = bool(self.extension_app.email)
+        email_configured = bool(self.extension_app.email) and bool(
+            self.extension_app._config.smtp_instance
+        )
+
         self.set_status(HTTPStatus.OK)
         self.finish(
             {
@@ -73,7 +76,7 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
         self.logger.debug(f"Registering notification for cell_id: {params.cell_id}")
 
         # If a timeout threshold is configured, schedule a timer to trigger notification.
-        if params.mode in ("custom-timeout", "global-timeout"):
+        if params.mode in ("custom-timeout"):
             timer = threading.Timer(
                 params.threshold, self.extension_app.send_notification, args=(params,)
             )
@@ -93,7 +96,7 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
         """
         try:
             data: Dict[str, Any] = json.loads(body)
-            params = NotificationParams(**data)
+            params = notification_params_from_dict(data)
             return params, ""
         except json.JSONDecodeError:
             return None, "Invalid JSON in request"
@@ -141,7 +144,7 @@ class NotifyTriggerHandler(ExtensionHandlerMixin, JupyterHandler):
         """
         try:
             data: Dict[str, Any] = json.loads(body)
-            params = NotificationParams(**data)
+            params = notification_params_from_dict(data)
             return params, ""
         except json.JSONDecodeError:
             return None, "Invalid JSON in request"

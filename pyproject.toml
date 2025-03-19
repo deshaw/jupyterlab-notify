@@ -23,11 +23,12 @@ classifiers = [
 ]
 dependencies = [
     "jupyter_server>=2.0.1,<3",
-    "pydantic>=2.0"
+    "slack_sdk>=3.35.0"
 ]
 dynamic = ["version", "description", "authors", "urls", "keywords"]
 
 [project.optional-dependencies]
+server-side-execution = ["jupyter-server-nbmodel>=0.1.1a2","jupyter-docprovider>=1.0.0b1", "jupyter-server-ydoc>=1.0.0b1"]
 test = [
     "ipython>=8.0.0",
     "pytest",
@@ -36,7 +37,6 @@ test = [
     "pytest-mock",
     "jinja2",
     "slack-sdk",
-    "pydantic",
 ]
 
 [tool.hatch.version]

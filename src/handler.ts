@@ -41,6 +41,5 @@ export async function requestAPI<T>(
   if (!response.ok) {
     throw new ServerConnection.ResponseError(response, data.message || data);
   }
-  console.log('Response:', data);
   return data;
 }

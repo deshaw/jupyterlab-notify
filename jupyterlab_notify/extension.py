@@ -5,6 +5,7 @@ from typing import Dict, Any
 from jupyter_server.extension.application import ExtensionApp
 from .handlers import NotifyHandler, NotifyTriggerHandler
 from .config import NotificationConfig, NotificationParams
+from datetime import datetime, timedelta
 
 NBMODEL_SCHEMA_ID = (
     "https://events.jupyter.org/jupyter_server_nbmodel/cell_execution/v1"
@@ -16,8 +17,8 @@ class NotifyExtension(ExtensionApp):
 
     def initialize(self) -> None:
         """Initialize extension, configuration, logging, and event listeners."""
-        self._init_config()
         self._init_logging()
+        self._init_config()
         self._init_nbmodel_listener()
         super().initialize()
 
@@ -42,12 +43,13 @@ class NotifyExtension(ExtensionApp):
         self.slack_channel_name = self._config.slack_channel_name
 
         try:
-            import slack  # type: ignore
+            from slack_sdk import WebClient
 
             if self._config.slack_token:
-                self.slack_client = slack.WebClient(token=self._config.slack_token)
+                self.slack_client = WebClient(token=self._config.slack_token)
             self.slack_imported = True
-        except ImportError:
+        except Exception as e:
+            self.logger.debug(f"Failed to configure slack: {e}")
             self.slack_imported = False
 
     def _init_nbmodel_listener(self) -> None:
@@ -82,28 +84,35 @@ class NotifyExtension(ExtensionApp):
 
     async def event_listener(self, logger: Any, schema_id: str, data: dict) -> None:
         """
-        Listen to cell execution events and send notifications upon completion.
+        Handle cell execution events and send notifications upon completion.
 
         Args:
-            logger: The event logger.
-            schema_id: The event schema identifier.
-            data: The event data.
+            logger: The event logger instance.
+            schema_id: The schema identifier for the event.
+            data: The event data containing details about the cell execution.
         """
-        if data.get("event_type") != "execution_end":
+        event_type = data.get("event_type")
+        cell_id = data.get("cell_id")
+
+        if event_type == "execution_start" and cell_id in self.cell_ids:
+            params = self.cell_ids[cell_id]
+            if params.mode == "default":
+                params.start_time = data.get("timestamp")
             return
 
-        self.logger.debug(f"Received event: {data}")
-        cell_id = data.get("cell_id")
-        if cell_id and cell_id in self.cell_ids:
-            params = self.cell_ids[cell_id]
-            if params.timer:
-                params.timer.cancel()
-            params.success = data.get("success")
-            params.error = data.get("kernel_error")
-            self.logger.debug(f"Notifying for cell_id {cell_id}: {params}")
-            self.send_notification(params)
-            # Remove cell record after notification is sent.
-            del self.cell_ids[cell_id]
+        if event_type != "execution_end" or cell_id not in self.cell_ids:
+            return
+
+        self.logger.debug(f"Received execution end event: {data}")
+        params = self.cell_ids[cell_id]
+        if params.timer:
+            params.timer.cancel()
+        params.success = data.get("success")
+        params.error = data.get("kernel_error")
+        self.logger.debug(f"Sending notification for cell_id {cell_id}: {params}")
+        self.send_notification(params, data.get("timestamp"))
+        # Remove cell record after notification is sent.
+        del self.cell_ids[cell_id]
 
     def send_slack_notification(self, message_content: str) -> None:
         """
@@ -156,7 +165,9 @@ class NotifyExtension(ExtensionApp):
         except Exception as exc:
             self.logger.error(f"Error sending email notification: {exc}")
 
-    def send_notification(self, params: NotificationParams) -> None:
+    def send_notification(
+        self, params: NotificationParams, end_time: str | None = None
+    ) -> None:
         """
         Prepare and dispatch notifications based on the parameters.
 
@@ -172,9 +183,7 @@ class NotifyExtension(ExtensionApp):
             message = "Cell execution timed out!"
         else:
             status = "Success" if params.success else "Failed"
-            message = (
-                params.success_message if params.success else params.failure_message
-            )
+            message = params.successMessage if params.success else params.failureMessage
             if not params.success and params.error:
                 message += f"\nError:\n{params.error}"
 
@@ -185,12 +194,20 @@ class NotifyExtension(ExtensionApp):
             )
             return
 
+        # Skip notification if execution time is below the threshold in default mode
+        if params.mode == "default" and params.start_time and end_time:
+            start_time = datetime.fromisoformat(params.start_time)
+            end_time = datetime.fromisoformat(end_time)
+
+            if (end_time - start_time) < timedelta(seconds=params.threshold):
+                return
+
         formatted_message = (
             f"Execution Status: {status}\nCell id: {params.cell_id}\nDetails: {message}"
         )
         self.logger.debug(f"Formatted notification message: {formatted_message}")
 
-        if params.slack:
+        if params.slackEnabled:
             self.send_slack_notification(formatted_message)
-        if params.email:
+        if params.emailEnabled:
             self.send_email_notification(formatted_message)
