@@ -1,6 +1,5 @@
-import logging
 from email.message import EmailMessage
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from jupyter_server.extension.application import ExtensionApp
 from .handlers import NotifyHandler, NotifyTriggerHandler
@@ -23,7 +22,6 @@ class NotifyExtension(ExtensionApp):
 
     def _init_config(self) -> None:
         """Initialize and set up the notification configuration."""
-        print("\nConfig:", self.config)
         self._config = NotificationConfig(config=self.config)
         self.slack_client = None
         self.slack_imported = False
@@ -157,7 +155,7 @@ class NotifyExtension(ExtensionApp):
             self.log.error(f"Error sending email notification: {exc}")
 
     def send_notification(
-        self, params: NotificationParams, end_time: str | None = None
+        self, params: NotificationParams, end_time: Optional[str] = None
     ) -> None:
         """
         Prepare and dispatch notifications based on the parameters.

@@ -126,7 +126,7 @@ const displayConfigWarning = (
         label: 'Help',
         callback: () =>
           showErrorMessage(`${service} Not Configured`, {
-            message: `Add a ${service.toLowerCase()} configuration to ~/.jupyter/jupyterlab_notify_config.json to enable ${service.toLowerCase()} notifications. Example: \n{\n  "${configKey}": "${example}"}-config"\n}`,
+            message: `Add a ${service.toLowerCase()} configuration to directory listed under the config section of jupyter --paths (e.g., ~/.jupyter/jupyter_notify_config.json) to enable ${service.toLowerCase()} notifications. Example: \n{\n  "${configKey}": "${example}"}-config"\n}. If you've already configured it, there might be an issue. Please check the terminal for errors and review your setup.`,
           }),
       },
     ],

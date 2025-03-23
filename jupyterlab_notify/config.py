@@ -82,8 +82,6 @@ class NotificationConfig(Configurable):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        print(f"\nConfig-2: {self.config}\n")
-        print(f"email:", self.email)
         self.smtp_instance = None
         self._setup_smtp_instance()
 
@@ -166,13 +164,3 @@ class NotificationConfig(Configurable):
             return self.smtp_args()
         else:
             return self.smtp_args
-
-    # def _load_from_file(self, key):
-    #     config_path = Path.home() / r".jupyter/jupyterlab_notify_config.json"
-    #     try:
-    #         with open(config_path, "r") as f:
-    #             config = json.load(f)
-    #             return config.get(key)
-    #     except (FileNotFoundError, json.JSONDecodeError):
-    #         print("File not found!")
-    #         return None
