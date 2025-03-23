@@ -43,9 +43,9 @@ jobs:
 
       - name: Install browser and build extension
         run: |
+          jlpm run build
           cd ui-tests
           jlpm playwright install chromium
-          jlpm run build
 
       - name: Wait for JupyterLab to be ready
         run: npx wait-on@7.2.0 http-get://localhost:8888/lab -t 360000
