@@ -15,6 +15,8 @@ The `jupyterlab-notify` extension allows you to receive notifications about cell
 > ```bash
 > pip install jupyterlab-notify[server-side-execution]
 > ```
+>
+> JupyterLab Notify requires execution timing data, so it automatically sets `record_timing` to true in the notebook settings.
 
 ### Configuration
 

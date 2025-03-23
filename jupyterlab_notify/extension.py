@@ -13,27 +13,17 @@ NBMODEL_SCHEMA_ID = (
 
 
 class NotifyExtension(ExtensionApp):
-    name = "jupyter_notify_v2"
+    name = "notify"
 
     def initialize(self) -> None:
         """Initialize extension, configuration, logging, and event listeners."""
-        self._init_logging()
         self._init_config()
         self._init_nbmodel_listener()
         super().initialize()
 
-    def _init_logging(self) -> None:
-        """Setup logging for the extension."""
-        self.logger = logging.getLogger("jupyter-notify")
-        self.logger.setLevel(logging.DEBUG)
-        if not self.logger.hasHandlers():
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.DEBUG)
-            self.logger.addHandler(console_handler)
-
     def _init_config(self) -> None:
         """Initialize and set up the notification configuration."""
-        self._config = NotificationConfig()
+        self._config = NotificationConfig(config=self.config)
         self.slack_client = None
         self.slack_imported = False
 
@@ -49,7 +39,7 @@ class NotifyExtension(ExtensionApp):
                 self.slack_client = WebClient(token=self._config.slack_token)
             self.slack_imported = True
         except Exception as e:
-            self.logger.debug(f"Failed to configure slack: {e}")
+            self.log.debug(f"Failed to configure slack: {e}")
             self.slack_imported = False
 
     def _init_nbmodel_listener(self) -> None:
@@ -57,13 +47,13 @@ class NotifyExtension(ExtensionApp):
         try:
             from jupyter_server_nbmodel.event_logger import event_logger
 
-            self.logger.debug("Registering event listener for nbmodel events.")
+            self.log.debug("Registering event listener for nbmodel events.")
             event_logger.add_listener(
                 schema_id=NBMODEL_SCHEMA_ID, listener=self.event_listener
             )
             self.is_listening = True
         except ImportError:
-            self.logger.debug(
+            self.log.debug(
                 "jupyter_server_nbmodel not available; skipping event listener."
             )
             self.is_listening = False
@@ -103,13 +93,13 @@ class NotifyExtension(ExtensionApp):
         if event_type != "execution_end" or cell_id not in self.cell_ids:
             return
 
-        self.logger.debug(f"Received execution end event: {data}")
+        self.log.debug(f"Received execution end event: {data}")
         params = self.cell_ids[cell_id]
         if params.timer:
             params.timer.cancel()
         params.success = data.get("success")
         params.error = data.get("kernel_error")
-        self.logger.debug(f"Sending notification for cell_id {cell_id}: {params}")
+        self.log.debug(f"Sending notification for cell_id {cell_id}: {params}")
         self.send_notification(params, data.get("timestamp"))
         # Remove cell record after notification is sent.
         del self.cell_ids[cell_id]
@@ -121,9 +111,9 @@ class NotifyExtension(ExtensionApp):
         Args:
             message_content: The content to send in the Slack message.
         """
-        self.logger.debug("Attempting to send Slack notification.")
+        self.log.debug("Attempting to send Slack notification.")
         if not (self.slack_imported and self.slack_client):
-            self.logger.error("Slack library not imported or client not initialized.")
+            self.log.error("Slack library not imported or client not initialized.")
             return
 
         channel = f"#{self.slack_channel_name}"
@@ -135,12 +125,12 @@ class NotifyExtension(ExtensionApp):
                 )
                 channel = response["channel"]["id"]
             except Exception as exc:
-                self.logger.error(f"Failed to open DM conversation: {exc}")
+                self.log.error(f"Failed to open DM conversation: {exc}")
 
         try:
             self.slack_client.chat_postMessage(channel=channel, text=message_content)
         except Exception as exc:
-            self.logger.error(f"Error sending Slack notification: {exc}")
+            self.log.error(f"Error sending Slack notification: {exc}")
 
     def send_email_notification(self, message_content: str) -> None:
         """
@@ -149,9 +139,9 @@ class NotifyExtension(ExtensionApp):
         Args:
             message_content: The content to include in the email.
         """
-        self.logger.debug("Attempting to send email notification.")
+        self.log.debug("Attempting to send email notification.")
         if not self.email:
-            self.logger.error("Email is not configured; skipping email notification.")
+            self.log.error("Email is not configured; skipping email notification.")
             return
 
         email_message = EmailMessage()
@@ -163,7 +153,7 @@ class NotifyExtension(ExtensionApp):
         try:
             self._config.smtp_instance.send_message(email_message)
         except Exception as exc:
-            self.logger.error(f"Error sending email notification: {exc}")
+            self.log.error(f"Error sending email notification: {exc}")
 
     def send_notification(
         self, params: NotificationParams, end_time: str | None = None
@@ -174,7 +164,7 @@ class NotifyExtension(ExtensionApp):
         Args:
             params: Notification parameters including mode, messages, and status.
         """
-        self.logger.debug(f"Preparing to send notification with params: {params}")
+        self.log.debug(f"Preparing to send notification with params: {params}")
 
         # Determine status and message based on cell execution
         if params.timer and params.timer.is_alive():
@@ -189,7 +179,7 @@ class NotifyExtension(ExtensionApp):
 
         # Decide whether to send the notification based on mode
         if params.mode == "never" or (params.mode == "on-error" and params.success):
-            self.logger.debug(
+            self.log.debug(
                 "Notification mode conditions not met; skipping notification."
             )
             return
@@ -205,7 +195,7 @@ class NotifyExtension(ExtensionApp):
         formatted_message = (
             f"Execution Status: {status}\nCell id: {params.cell_id}\nDetails: {message}"
         )
-        self.logger.debug(f"Formatted notification message: {formatted_message}")
+        self.log.debug(f"Formatted notification message: {formatted_message}")
 
         if params.slackEnabled:
             self.send_slack_notification(formatted_message)

@@ -34,14 +34,13 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
     """
 
     def initialize(self, extension_app: Any, *args: Any, **kwargs: Any) -> None:
-        self.logger = setup_logger("jupyter-notify")
         self.extension_app = extension_app
         super().initialize(*args, **kwargs)
 
     @tornado.web.authenticated
     def get(self) -> None:
         """Check if the extension is listening for nbmodel events and verify configuration."""
-        self.logger.debug(
+        self.extension_app.log.debug(
             f"Checking nbmodel listener: {self.extension_app.is_listening}"
         )
         slack_configured = bool(
@@ -73,7 +72,9 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
             self.finish({"error": error})
             return
 
-        self.logger.debug(f"Registering notification for cell_id: {params.cell_id}")
+        self.extension_app.log.debug(
+            f"Registering notification for cell_id: {params.cell_id}"
+        )
 
         # If a timeout threshold is configured, schedule a timer to trigger notification.
         if params.mode in ("custom-timeout"):
