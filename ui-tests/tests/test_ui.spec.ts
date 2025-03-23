@@ -88,14 +88,6 @@ async function createNewNotebook(page: IJupyterLabPageFixture, name: string) {
   // Create a new notebook
   await page.notebook.createNew(name);
 
-  // Set record_timing to true if dialog appears
-  const setToTrueButton = page.locator(
-    '.jp-mod-accept:has-text("Set to true")',
-  );
-  if (await setToTrueButton.isVisible()) {
-    await setToTrueButton.click();
-  }
-
   // Select default kernel if dialog appears
   const selectButton = page.locator('.jp-mod-accept:has-text("Select")');
   if (await selectButton.isVisible()) {
@@ -109,7 +101,6 @@ async function createNewNotebook(page: IJupyterLabPageFixture, name: string) {
  * icon and cell metadata.
  */
 test('Toggle notification mode updates icon and metadata', async ({ page }) => {
-  await setupNotificationMock(page);
   // Create a new notebook
   await createNewNotebook(page, 'test.ipynb');
 

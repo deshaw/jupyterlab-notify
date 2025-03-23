@@ -15,8 +15,6 @@ import {
   showErrorMessage,
   Notification as JupyterNotification,
   InputDialog,
-  Dialog,
-  showDialog,
 } from '@jupyterlab/apputils';
 import {
   bellOutlineIcon,
@@ -155,39 +153,6 @@ function decodeThresholdToSeconds(threshold: string) {
   }
 }
 
-async function ensureRecordTiming(settingRegistry: ISettingRegistry) {
-  try {
-    const nbPluginId = '@jupyterlab/notebook-extension:tracker';
-    const notebookSettings = await settingRegistry.load(nbPluginId);
-
-    // Get the current value of recordTiming
-    const recordTiming = notebookSettings.get('recordTiming')
-      .composite as boolean;
-
-    // Check if recordTiming is false
-    if (!recordTiming) {
-      const result = await showDialog({
-        title: 'Enable Record Timing',
-        body:
-          'The "recordTiming" setting seems to be set to false. ' +
-          'jupyterlabNotify uses timing metadata to work with notifications. ' +
-          'Please set it to true for the extension to function properly.',
-        buttons: [
-          Dialog.cancelButton({ label: 'Cancel' }),
-          Dialog.okButton({ label: 'Set to true' }),
-        ],
-      });
-
-      if (result.button.accept) {
-        // User chose "Set to true"
-        await notebookSettings.set('recordTiming', true);
-      }
-    }
-  } catch (error) {
-    console.error('Failed to ensure recordTiming is set to true:', error);
-  }
-}
-
 /**
  * Main plugin definition
  */
@@ -223,6 +188,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
     };
 
     if (settingRegistry) {
+      // Ensure the recordTiming setting is enabled for the extension to function correctly
+      const nbPluginId = '@jupyterlab/notebook-extension:tracker';
+      const nbSettings = await settingRegistry.load(nbPluginId);
+      nbSettings.set('recordTiming', true);
+
+      // Ensure recordTiming remains true if user tries to change it
+      nbSettings.changed.connect(async () => {
+        const recordTiming = nbSettings.get('recordTiming')
+          .composite as boolean;
+        if (!recordTiming) {
+          await nbSettings.set('recordTiming', true);
+        }
+      });
       try {
         const settings = await settingRegistry.load(plugin.id);
         updateSettings(settings);
@@ -241,10 +219,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Track new cells
     tracker.widgetAdded.connect((_, notebookPanel: NotebookPanel) => {
-      // Ensure the recordTiming setting is enabled for the extension to function correctly with threshold and timeout notifications
-      if (settingRegistry) {
-        void ensureRecordTiming(settingRegistry).catch(console.error);
-      }
       const notebook = notebookPanel.content;
       notebook.model?.cells.changed.connect((_, change) => {
         if (change.type === 'add') {
