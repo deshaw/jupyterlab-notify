@@ -86,7 +86,7 @@ async function selectNotificationMode(
 
 async function createNewNotebook(page: IJupyterLabPageFixture, name: string) {
   // Create a new notebook
-  await page.notebook.createNew('test.ipynb');
+  await page.notebook.createNew(name);
 
   // Set record_timing to true if dialog appears
   const setToTrueButton = page.locator(
@@ -109,6 +109,7 @@ async function createNewNotebook(page: IJupyterLabPageFixture, name: string) {
  * icon and cell metadata.
  */
 test('Toggle notification mode updates icon and metadata', async ({ page }) => {
+  await setupNotificationMock(page);
   // Create a new notebook
   await createNewNotebook(page, 'test.ipynb');
 

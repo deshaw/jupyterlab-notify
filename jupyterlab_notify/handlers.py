@@ -125,11 +125,11 @@ class NotifyTriggerHandler(ExtensionHandlerMixin, JupyterHandler):
             self.finish({"error": error})
             return
 
-        # If a timer exists, cancel or replace it as needed.
+        # If a timer exists, it is due to timout!
         if params.timer:
-            # Starting a dummy timer as placeholder (consider revisiting the strategy)
-            timer = threading.Timer(10, lambda *args: None)
-            timer.start()
+            # Starting a dummy timer as placeholder (TODO consider revisiting the strategy)
+            params.timer = threading.Timer(10, lambda *args: None)
+            params.timer.start()
 
         self.extension_app.send_notification(params)
         self.set_status(HTTPStatus.OK)

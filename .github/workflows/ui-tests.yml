@@ -36,15 +36,20 @@ jobs:
           cd ui-tests
           jlpm install
 
-      - name: Build extension
-        run: jlpm build
+      - name: Launch JupyterLab
+        run: |
+          cd ui-tests
+          jlpm start &
 
-      - name: Install browser
+      - name: Install browser and build extension
         run: |
           cd ui-tests
           jlpm playwright install chromium
+          jlpm run build
 
-      # Run the Galata tests
+      - name: Wait for JupyterLab to be ready
+        run: npx wait-on@7.2.0 http-get://localhost:8888/lab -t 360000
+
       - name: Run UI Tests
         run: |
           cd ui-tests

@@ -359,7 +359,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       if (Notification.permission !== 'granted') {
-        Notification.requestPermission().catch(err => {
+        await Notification.requestPermission().catch(err => {
           JupyterNotification.emit('Permission Error', 'error', {
             autoClose: 3000,
             actions: [
