@@ -30,9 +30,9 @@
       "default": 30,
       "minimum": 0
     },
-    "customThreshold": {
-      "title": "Threshold for custom-timeout notification",
-      "description": "Threshold-based notifications (unit in seconds)",
+    "customTimeout": {
+      "title": "Timeout for custom-timeout notification",
+      "description": "Custom Timout value (unit in seconds)",
       "type": ["number", "null"],
       "default": 60,
       "minimum": 0

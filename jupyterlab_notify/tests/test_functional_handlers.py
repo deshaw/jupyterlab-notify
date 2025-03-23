@@ -21,6 +21,11 @@ class DummyIdentityProvider(IdentityProvider):
         return {"name": "test-user"}  # Mock user details
 
 
+class DummyConfig:  # Mock config
+    def __init__(self):
+        self.smtp_instance = True
+
+
 class DummyExtensionApp:
     def __init__(self):
         self.is_listening = True
@@ -29,6 +34,7 @@ class DummyExtensionApp:
         self.slack_user_id = "U12345678"
         self.slack_channel_name = "general"
         self.cell_ids = {}
+        self._config = DummyConfig()
 
     def send_notification(self, params):
         self.notification_sent = True

@@ -6,33 +6,41 @@ import {
   INotebookTracker,
   NotebookActions,
   NotebookPanel,
-  // NotebookPanel,
 } from '@jupyterlab/notebook';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { ITranslator, nullTranslator } from '@jupyterlab/translation';
 import { LabIcon, ToolbarButton } from '@jupyterlab/ui-components';
 import {
-  // createDefaultFactory,
   IToolbarWidgetRegistry,
   showErrorMessage,
+  Notification as JupyterNotification,
+  InputDialog,
+  Dialog,
+  showDialog,
 } from '@jupyterlab/apputils';
 import {
   bellOutlineIcon,
-  // bellFilledIcon,
   bellOffIcon,
   bellAlertIcon,
   bellClockIcon,
 } from './icons';
 import { requestAPI } from './handler';
-import { Notification as JupyterNotification } from '@jupyterlab/apputils';
 import { Cell, ICellModel } from '@jupyterlab/cells';
-import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
-import { MimeModel } from '@jupyterlab/rendermime';
+import { IRenderMimeRegistry, MimeModel } from '@jupyterlab/rendermime';
 import { Menu } from '@lumino/widgets';
 
 namespace CommandIDs {
   export const setNotificationMode = 'notify:set-notification-mode';
+  export const setCustomTimeout = 'notify:set-custom-timeout';
 }
+
+// Timeout options for the submenu
+const TIMEOUT_OPTIONS = [
+  { label: '1 min', value: '1m' },
+  { label: '30 min', value: '30m' },
+  { label: '1 hr', value: '1h' },
+  { label: 'Custom', value: 'custom' },
+];
 
 const CELL_METADATA_KEY = 'jupyterlab_notify.notify';
 const MIME_TYPE = 'application/desktop-notify+json';
@@ -56,11 +64,11 @@ interface INotifySettings {
   slack: boolean;
   successMessage: string;
   defaultThreshold: number | null;
-  customThreshold: number | null;
 }
 
 interface ICellMetadata {
   mode: ModeId;
+  threshold?: string;
 }
 
 interface IInitialResponse {
@@ -85,6 +93,9 @@ const MODES: Record<ModeId, IMode> = {
   'on-error': { label: 'On error', icon: bellAlertIcon },
   'custom-timeout': { label: 'Custom Timeout', icon: bellClockIcon },
 };
+
+// Regular expression for validating timeout input
+const TIMEOUT_PATTERN = /^(\d+(\.\d+)?)([smh])$/;
 
 /**
  * Generates notification data with a custom message
@@ -124,6 +135,59 @@ const displayConfigWarning = (
   });
 };
 
+// Function to decode threshold to seconds
+function decodeThresholdToSeconds(threshold: string) {
+  const match = threshold.match(TIMEOUT_PATTERN);
+  if (!match) {
+    return null;
+  }
+  const value = parseFloat(match[1]);
+  const unit = match[3];
+  switch (unit) {
+    case 's':
+      return value;
+    case 'm':
+      return value * 60;
+    case 'h':
+      return value * 3600;
+    default:
+      return null;
+  }
+}
+
+async function ensureRecordTiming(settingRegistry: ISettingRegistry) {
+  try {
+    const nbPluginId = '@jupyterlab/notebook-extension:tracker';
+    const notebookSettings = await settingRegistry.load(nbPluginId);
+
+    // Get the current value of recordTiming
+    const recordTiming = notebookSettings.get('recordTiming')
+      .composite as boolean;
+
+    // Check if recordTiming is false
+    if (!recordTiming) {
+      const result = await showDialog({
+        title: 'Enable Record Timing',
+        body:
+          'The "recordTiming" setting seems to be set to false. ' +
+          'jupyterlabNotify uses timing metadata to work with notifications. ' +
+          'Please set it to true for the extension to function properly.',
+        buttons: [
+          Dialog.cancelButton({ label: 'Cancel' }),
+          Dialog.okButton({ label: 'Set to true' }),
+        ],
+      });
+
+      if (result.button.accept) {
+        // User chose "Set to true"
+        await notebookSettings.set('recordTiming', true);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to ensure recordTiming is set to true:', error);
+  }
+}
+
 /**
  * Main plugin definition
  */
@@ -151,7 +215,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       slack: false,
       successMessage: 'Cell execution completed successfully',
       defaultThreshold: 30,
-      customThreshold: null,
     };
 
     // Settings management
@@ -178,6 +241,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Track new cells
     tracker.widgetAdded.connect((_, notebookPanel: NotebookPanel) => {
+      // Ensure the recordTiming setting is enabled for the extension to function correctly with threshold and timeout notifications
+      if (settingRegistry) {
+        void ensureRecordTiming(settingRegistry).catch(console.error);
+      }
       const notebook = notebookPanel.content;
       notebook.model?.cells.changed.connect((_, change) => {
         if (change.type === 'add') {
@@ -332,19 +399,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
         );
         return;
       }
-      if (
-        mode === 'custom-timeout' &&
-        (!(typeof notifySettings.customThreshold === 'number') ||
-          !Number.isFinite(notifySettings.customThreshold))
-      ) {
-        JupyterNotification.emit(
-          `Invalid custom threshold value: Expected a finite number, but received ${notifySettings.customThreshold}`,
-          'error',
-          {
-            autoClose: 3000,
-          },
-        );
-        return;
+      if (mode === 'custom-timeout') {
+        const thresholdInSeconds = cellMetadata.threshold
+          ? decodeThresholdToSeconds(cellMetadata.threshold)
+          : null;
+
+        if (!Number.isFinite(thresholdInSeconds)) {
+          JupyterNotification.emit(
+            `Invalid custom threshold value: Expected a finite number, but received ${
+              cellMetadata.threshold ?? 'undefined'
+            }`,
+            'error',
+            { autoClose: 3000 },
+          );
+        }
       }
 
       const payload = {
@@ -356,7 +424,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         failureMessage: notifySettings.failureMessage,
         threshold:
           mode === 'custom-timeout'
-            ? notifySettings.customThreshold
+            ? decodeThresholdToSeconds(cellMetadata.threshold!)
             : notifySettings.defaultThreshold,
       };
 
@@ -389,23 +457,63 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
     const trans = (translator ?? nullTranslator).load('jupyterlab-notify');
 
+    // Command to set notification mode and threshold
     app.commands.addCommand(CommandIDs.setNotificationMode, {
-      label: args => MODES[args.modeId as ModeId].label,
-      icon: args => MODES[args.modeId as ModeId].icon,
+      label: args => {
+        if (args.label) {
+          return args.label as string;
+        }
+        const modeId = args.modeId as ModeId;
+        return MODES[modeId].label;
+      },
+      icon: args =>
+        args.threshold ? undefined : MODES[args.modeId as ModeId].icon,
       execute: args => {
-        const modeId = args.modeId as string;
+        const modeId = args.modeId;
+        const threshold = args.threshold; // Stored as string, e.g., "120s"
         const current = tracker.currentWidget;
         if (!current) {
           console.warn('No notebook selected');
           return;
         }
         const cell = current.content.activeCell;
-        if (cell) {
-          cell.model.setMetadata(CELL_METADATA_KEY, { mode: modeId });
+        if (!cell) {
+          return;
         }
+        const metadata =
+          modeId === 'custom-timeout' && threshold
+            ? { mode: modeId, threshold }
+            : { mode: modeId };
+        cell.model.setMetadata(CELL_METADATA_KEY, metadata);
       },
       isEnabled: () =>
         !!tracker.currentWidget && !!tracker.currentWidget.content.activeCell,
+    });
+
+    // Command to prompt for custom timeout
+    app.commands.addCommand(CommandIDs.setCustomTimeout, {
+      label: 'Custom',
+      execute: async () => {
+        const result = await InputDialog.getText({
+          title: 'Set Custom Timeout',
+          label: 'Enter timeout (e.g., 120s, 45m, 1h):',
+          placeholder: 'e.g., 120s',
+        });
+        if (result.button.accept && result.value) {
+          const input = result.value.trim();
+          if (!TIMEOUT_PATTERN.test(input)) {
+            await showErrorMessage(
+              'Invalid Input',
+              'Please enter a positive number followed by s (seconds), m (minutes), or h (hours) — e.g., 120s, 45m, 1h.',
+            );
+            return;
+          }
+          await app.commands.execute(CommandIDs.setNotificationMode, {
+            modeId: 'custom-timeout',
+            threshold: input,
+          });
+        }
+      },
     });
 
     // Menu for Notification modes
@@ -413,10 +521,33 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notifyMenu.title.label = trans.__('Cell Notification');
 
     Object.entries(MODES).forEach(([modeId, mode]) => {
-      notifyMenu.addItem({
-        command: CommandIDs.setNotificationMode,
-        args: { modeId },
-      });
+      if (modeId === 'custom-timeout') {
+        const subMenu = new Menu({ commands: app.commands });
+        subMenu.title.label = mode.label;
+        subMenu.title.icon = mode.icon;
+        TIMEOUT_OPTIONS.forEach(option => {
+          if (option.value === 'custom') {
+            subMenu.addItem({
+              command: CommandIDs.setCustomTimeout,
+            });
+          } else {
+            subMenu.addItem({
+              command: CommandIDs.setNotificationMode,
+              args: {
+                modeId: 'custom-timeout',
+                threshold: option.value,
+                label: option.label,
+              },
+            });
+          }
+        });
+        notifyMenu.addItem({ type: 'submenu', submenu: subMenu });
+      } else {
+        notifyMenu.addItem({
+          command: CommandIDs.setNotificationMode,
+          args: { modeId },
+        });
+      }
     });
 
     // Helper function to update the button's icon

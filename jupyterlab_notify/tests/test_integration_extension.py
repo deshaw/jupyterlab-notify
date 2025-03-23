@@ -54,16 +54,17 @@ def test_end_to_end_notification(notify_extension):
     """
     params = NotificationParams(
         cell_id="cell_integration",
-        mode="always",
+        mode="default",
         slackEnabled=True,
         emailEnabled=True,
         successMessage="Integration Success",
         failureMessage="Integration Failure",
         threshold=5,
         success=True,
+        start_time="2025-03-21T12:00:00.123456",
     )
     # For this test, we do not override send_slack_notification and send_email_notification.
-    notify_extension.send_notification(params)
+    notify_extension.send_notification(params, end_time="2025-03-21T12:00:10.123456")
 
     # Verify that the dummy SMTP's send_message was called.
     notify_extension._config.smtp_instance.send_message.assert_called_once()

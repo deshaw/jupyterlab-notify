@@ -84,12 +84,10 @@ def test_send_email_notification(notify_extension):
 
 def test_send_notification_modes(notify_extension, monkeypatch):
     """Parametrized test for different notification modes."""
-    import itertools
-
     # mode, success, expected_slack, expected_email
     test_cases = [
-        ("always", True, True, True),
-        ("always", False, True, True),
+        ("default", True, True, True),
+        ("default", False, True, True),
         ("never", True, False, False),
         ("never", False, False, False),
         ("on-error", True, False, False),
@@ -104,9 +102,10 @@ def test_send_notification_modes(notify_extension, monkeypatch):
             emailEnabled=True,
             successMessage="Success",
             failureMessage="Failure",
-            threshold=10,
+            threshold=5,
             success=success,
             error="Error occurred" if not success else None,
+            start_time="2025-03-21T12:00:00.123456",
         )
         slack_called = False
         email_called = False
@@ -122,16 +121,50 @@ def test_send_notification_modes(notify_extension, monkeypatch):
         monkeypatch.setattr(notify_extension, "send_slack_notification", fake_slack)
         monkeypatch.setattr(notify_extension, "send_email_notification", fake_email)
 
-        notify_extension.send_notification(params)
+        notify_extension.send_notification(
+            params, end_time="2025-03-21T12:00:10.123456"
+        )
         assert slack_called == expected_slack
         assert email_called == expected_email
+
+
+def test_no_notification_below_threshold(notify_extension, monkeypatch):
+    """No notifications if execution time is below threshold in default mode."""
+    params = NotificationParams(
+        cell_id="cell123",
+        mode="default",
+        slackEnabled=True,
+        emailEnabled=True,
+        successMessage="Success",
+        failureMessage="Failure",
+        threshold=5,
+        success=True,
+        start_time="2025-03-21T12:00:00.123456",
+    )
+    slack_called = False
+    email_called = False
+
+    def fake_slack(message):
+        nonlocal slack_called
+        slack_called = True
+
+    def fake_email(message):
+        nonlocal email_called
+        email_called = True
+
+    monkeypatch.setattr(notify_extension, "send_slack_notification", fake_slack)
+    monkeypatch.setattr(notify_extension, "send_email_notification", fake_email)
+
+    notify_extension.send_notification(params, end_time="2025-03-21T12:00:02.123456")
+    assert slack_called == False
+    assert email_called == False
 
 
 def test_send_notification_with_timeout(notify_extension, monkeypatch):
     """Test that a running timer causes the notification message to indicate a timeout."""
     params = NotificationParams(
         cell_id="cell_timeout",
-        mode="always",
+        mode="custom-timeout",
         slackEnabled=True,
         emailEnabled=True,
         successMessage="Success",
