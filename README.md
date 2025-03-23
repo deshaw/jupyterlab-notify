@@ -52,7 +52,6 @@ Beyond the commonly used settings above, the following options are available for
 
 These settings allow for customization, such as using a custom SMTP server or changing the SMTP port from the default `25` to others (e.g., `["localhost", 125]`), or targeting a specific Slack channel or user.
 
-
 ### Notification Modes
 
 You can control when notifications are sent by setting a mode for each cell. Modes can be configured through the JupyterLab interface by clicking on the bell icon in the cell toolbar.

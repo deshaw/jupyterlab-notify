@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import MagicMock
 from tornado.web import Application
 from tornado.testing import AsyncHTTPTestCase
@@ -35,6 +36,9 @@ class DummyExtensionApp:
         self.slack_channel_name = "general"
         self.cell_ids = {}
         self._config = DummyConfig()
+        # Add a dummy logger
+        self.log = logging.getLogger("DummyExtensionApp")
+        self.log.setLevel(logging.DEBUG)
 
     def send_notification(self, params):
         self.notification_sent = True

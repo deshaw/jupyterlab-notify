@@ -1,42 +1,32 @@
-import json
 import threading
 import pytest
 from unittest.mock import MagicMock
 from email.message import EmailMessage
-
+from traitlets.config import Config
 from jupyterlab_notify import extension
 from jupyterlab_notify.config import NotificationParams
-from pathlib import Path
 
 
 @pytest.fixture
-def dummy_config_file(tmp_path, monkeypatch):
-    # Set up a fake home directory with a .jupyter folder
-    fake_home = tmp_path
-    jupyter_dir = fake_home / ".jupyter"
-    jupyter_dir.mkdir()
-
-    # Create the dummy config file in the .jupyter folder
-    dummy_file = jupyter_dir / "jupyterlab_notify_config.json"
+def dummy_config():
+    # Create dummy config
     config_data = {
-        "email": "test@example.com",
-        "slack_token": "xoxb-dummy-slack-token",
-        "slack_user_id": "U12345678",
-        "slack_channel_name": "general",
+        "NotificationConfig": {
+            "email": "test@example.com",
+            "slack_token": "xoxb-dummy-slack-token",
+            "slack_user_id": "U12345678",
+            "slack_channel_name": "general",
+        }
     }
-    dummy_file.write_text(json.dumps(config_data))
-
-    # Patch Path.home() to return our fake home directory
-    monkeypatch.setattr(Path, "home", lambda: fake_home)
-    return config_data
+    return Config(config_data)  # Convert dict to Config
 
 
 @pytest.fixture
-def notify_extension(dummy_config_file):
+def notify_extension(dummy_config):
     # Create an instance of your NotifyExtension.
     ext = extension.NotifyExtension()
+    ext.update_config(dummy_config)
     ext._init_config()
-    ext._init_logging()
 
     # Replace the SMTP instance with a dummy object.
     dummy_smtp = MagicMock()
