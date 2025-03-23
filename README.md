@@ -16,23 +16,42 @@ The `jupyterlab-notify` extension allows you to receive notifications about cell
 > pip install jupyterlab-notify[server-side-execution]
 > ```
 >
-> JupyterLab Notify requires execution timing data, so it automatically sets `record_timing` to true in the notebook settings.
+> JupyterLab Notify v2 requires execution timing data, so it automatically sets `record_timing` to true in the notebook settings.
 
 ### Configuration
 
-To enable Slack and email notifications, create a `jupyterlab_notify_config.json` configuration file under a path listed in `jupyter --paths` config section (e.g. `~/.jupyter/jupyterlab_notify_config.json`) with the following format:
+To configure the **jupyterlab-notify** extension for Slack and email notifications, create a file named `jupyter_notify_config.json` and place it in a directory listed under the `config` section of `jupyter --paths` (e.g., `~/.jupyter/jupyter_notify_config.json`). This file defines settings for the `NotificationConfig` class.
+
+#### Sample Configuration File
+
+Here’s an example configuration enabling Slack and email notifications:
 
 ```json
 {
-  "slack_token": "xoxb-your-slackbot-token",
-  "slack_channel_name": "notifications",
-  "email": "user@example.com"
+  "NotificationConfig": {
+    "email": "example@domain.com",
+    "slack_token": "xoxb-abc123-your-slack-token",
+    "slack_user_id": "U98765432"
+  }
 }
 ```
 
-- `slack_token`: A valid Slack bot token with `chat:write` permissions. Refer [this article](https://api.slack.com/quickstart) to create your own slack bot
-- `slack_channel_name`: The Slack channel to post notifications to.
-- `email`: The email address to receive notifications. Refer [this article](https://mailtrap.io/blog/setup-smtp-server/) to setup SMTP server.
+- **`slack_token`**: A Slack bot token with `chat:write` permissions, used to send notifications to your Slack workspace.
+  - **How to get it**: See [Slack API Quickstart](https://api.slack.com/quickstart) to create a bot and obtain a token.
+- **`slack_channel_name`**: The name of the Slack channel (e.g., `"notifications"`) where messages will be posted.
+- **`email`**: The email address to receive notifications.
+  - **Note**: Requires an SMTP server. For setup help, see [this SMTP guide](https://mailtrap.io/blog/setup-smtp-server/).
+
+#### Additional Configuration Options
+
+Beyond the commonly used settings above, the following options are available for advanced use:
+
+- **`slack_user_id`**: A Slack user ID for sending direct messages instead of channel posts (e.g., `"U12345678"`).
+- **`smtp_class`**: Fully qualified name of the SMTP class (default: `"smtplib.SMTP"`).
+- **`smtp_args`**: Arguments for the SMTP class constructor, as a string (default: `["localhost"]`).
+
+These settings allow for customization, such as using a custom SMTP server or changing the SMTP port from the default `25` to others (e.g., `["localhost", 125]`), or targeting a specific Slack channel or user.
+
 
 ### Notification Modes
 
