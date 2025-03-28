@@ -36,7 +36,7 @@ namespace CommandIDs {
 const TIMEOUT_OPTIONS = [
   { label: '1 min', value: '1m' },
   { label: '30 min', value: '30m' },
-  { label: '1 hr', value: '1h' },
+  { label: '1 hour', value: '1h' },
   { label: 'Custom', value: 'custom' },
 ];
 
@@ -492,6 +492,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Menu for Notification modes
     const notifyMenu = new Menu({ commands: app.commands });
+    notifyMenu.addClass('jp-NotifyCellToolbarMenu');
     notifyMenu.title.label = trans.__('Cell Notification');
 
     Object.entries(MODES).forEach(([modeId, mode]) => {
@@ -554,10 +555,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         // Create the button with the correct initial icon
         const button = new ToolbarButton({
-          tooltip: trans.__('Change Cell Notification Settings'),
+          tooltip: `${MODES[modeId].label} (click to change)`,
           icon: MODES[modeId].icon, // Set initial icon based on current metadata
           onClick: () => {
-            // Not working!
             if (notifyMenu.isVisible) {
               notifyMenu.close();
             } else {

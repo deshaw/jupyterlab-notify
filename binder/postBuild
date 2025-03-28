@@ -32,7 +32,7 @@ def _(*args, **kwargs):
 _(sys.executable, "-m", "pip", "check")
 
 # install the labextension
-_(sys.executable, "-m", "pip", "install", "-e", ".")
+_(sys.executable, "-m", "pip", "install", "-e", ".[server-side-execution]")
 _(sys.executable, "-m", "jupyter", "labextension", "develop", "--overwrite", ".")
 _(
     sys.executable,

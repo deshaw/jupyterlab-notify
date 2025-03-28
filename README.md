@@ -225,4 +225,4 @@ This CLA is in place to protect all users of this project.
 [github-status-image]: https://github.com/deshaw/jupyterlab-notify/workflows/Build/badge.svg
 [github-status-url]: https://github.com/deshaw/jupyterlab-notify/actions?query=workflow%3ABuild
 [binder-image]: https://mybinder.org/badge_logo.svg
-[binder-url]: https://mybinder.org/v2/gh/deshaw/jupyterlab-notify.git/main?urlpath=lab%2Ftree%2Fnotebooks%2Findex.ipynb
+[binder-url]: https://mybinder.org/v2/gh/deshaw/jupyterlab-notify.git/main?urlpath=lab%2Ftree%2Fnotebooks%2FNotify.ipynb
