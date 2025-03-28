@@ -1,11 +1,11 @@
 /* Cell Toolbar menu to select the Notification mode */
-.jp-NotifyCellToolbarMenu {
+.jp-notify-menu {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 
-.jp-NotifyCellToolbarMenu .lm-Menu-itemIcon > svg {
+.jp-notify-menu .lm-Menu-itemIcon > svg {
   vertical-align: sub;
 }

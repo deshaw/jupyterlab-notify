@@ -492,7 +492,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Menu for Notification modes
     const notifyMenu = new Menu({ commands: app.commands });
-    notifyMenu.addClass('jp-NotifyCellToolbarMenu');
+    notifyMenu.addClass('jp-notify-menu');
     notifyMenu.title.label = trans.__('Cell Notification');
 
     Object.entries(MODES).forEach(([modeId, mode]) => {
