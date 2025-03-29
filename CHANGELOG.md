@@ -1,22 +1,22 @@
-## [2.0.2](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.2...v2.0.1) (UNRELEASED)
+## [2.0.2](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.1...v2.0.2b0) (UNRELEASED)
 
 ## Changed
 
 - Added options to configure the SMTP client to use
 
-## [2.0.1](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.1...v2.0.0) (2024-01-16)
+## [2.0.1](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.1...v2.0.2b0) (2024-01-16)
 
 ## Fixed
 
 - Fix the pre run cell hook to be compatible with ipython 8.18.x+
 
-## [2.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.0...v1.0.0) (2023-05-17)
+## [2.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v1.0.1...v2.0.1) (2023-05-17)
 
 ## Changed
 
 - Upgrade to jupyterlab4
 
-## [1.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v1.0.0...v1.0.0) (2021-07-12)
+## [1.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v1.0.1...v2.0.1) (2021-07-12)
 
 ### Added
 
