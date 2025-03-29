@@ -153,8 +153,8 @@ test('Toggle notification mode updates icon and metadata', async ({ page }) => {
   await expect(metadata).toContainText('"mode": "custom-timeout"');
   await expect(metadata).toContainText('"threshold": "30m"');
 
-  // Toggle to 'custom-timeout' with 1 hr option
-  await selectNotificationMode(page, 0, 'Custom Timeout', '1 hr');
+  // Toggle to 'custom-timeout' with hour option
+  await selectNotificationMode(page, 0, 'Custom Timeout', '1 hour');
   await expect(metadata).toContainText('"mode": "custom-timeout"');
   await expect(metadata).toContainText('"threshold": "1h"');
 
