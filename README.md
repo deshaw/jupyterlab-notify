@@ -56,29 +56,28 @@ These settings allow for customization, such as using a custom SMTP server or ch
 
 You can control when notifications are sent by setting a mode for each cell. Modes can be configured through the JupyterLab interface by clicking on the bell icon in the cell toolbar.
 
-![image](https://github.com/user-attachments/assets/52c0f81a-fdf3-4840-b168-4c067b2b1251)
+![image](https://github.com/darshan808/jupyterlab-notify/blob/v2-test/docs/celltoolbar-menu-screenshot.png?raw=true)
 
 **Supported modes include:**
 
 - `default`: Notification is sent only if cell execution exceeds the threshold time (default: 30 seconds). No notification if execution time is below the threshold.
 - `never`: Disables notifications for the cell.
 - `on-error`: Sends a notification only if the cell execution fails with an error.
-- `custom-timeout`: Sends a notification as soon as the cell-execution exceeds a timeout value specified in settings.
+- `custom-timeout`: Sends a notification as soon as the cell-execution exceeds a timeout value specified for that cell. Users can either choose a pre-existing timeout value or set a custom one.
 
-### Default Threshold And Custom Timeout
+### Default Threshold
 
-Configure the default threshold and custom timeout value in JupyterLab’s settings:
+Configure the default threshold value in JupyterLab’s settings:
 
 1. Go to Settings Editor.
-2. Select notify.
-3. Set "Default Threshold": 30 (in seconds) to apply to cells using the `default` mode.
-4. Set "Custom Timeout": 60 (in seconds) to apply to cells using the `custom-timeout` mode.
+2. Select Execution Notifications.
+3. Set "Threshold for default notifications": 5 (in seconds) to apply to cells using the `default` mode.
 
 ### Desktop Notifications
 
 Desktop notifications are enabled by default and appear as pop-up alerts on your system.
 
-![image](https://github.com/user-attachments/assets/77bb746d-2f00-4473-8a5e-28cb4ecba115)
+![image](https://github.com/darshan808/jupyterlab-notify/blob/v2-test/docs/desktop-notification.png?raw=true)
 
 ### Slack Notifications
 
@@ -92,7 +91,7 @@ Email notifications are sent to the configured email address, also requiring the
 
 If your email or Slack notifications are not configured but you attempt to enable them through the settings editor, a warning will be displayed when you try to execute a cell in the JupyterLab interface.
 
-![image](https://github.com/user-attachments/assets/d7ae64f0-e409-44db-a3a9-f657882da532)
+![image](https://github.com/darshan808/jupyterlab-notify/blob/v2-test/docs/configuration-warning-screenshot.png?raw=true)
 
 ## Troubleshoot
 
