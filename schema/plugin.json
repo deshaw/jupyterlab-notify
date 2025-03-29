@@ -30,13 +30,6 @@
       "default": 30,
       "minimum": 0
     },
-    "customTimeout": {
-      "title": "Timeout for custom-timeout notification",
-      "description": "Custom Timout value (unit in seconds)",
-      "type": ["number", "null"],
-      "default": 60,
-      "minimum": 0
-    },
     "successMessage": {
       "title": "Success message",
       "description": "Default message shown on successful cell execution",
