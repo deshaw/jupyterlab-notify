@@ -113,6 +113,12 @@ To install this package with [`pip`](https://pip.pypa.io/en/stable/) run
 pip install jupyterlab_notify
 ```
 
+To install with server-side execution dependencies run
+
+```bash
+pip install jupyterlab_notify[server-side-execution]
+```
+
 ## Contributing
 
 ### Development install
@@ -128,8 +134,16 @@ The `jlpm` command is JupyterLab's pinned version of
 # Change directory to the jupyterlab_notify directory
 # Install package in development mode
 pip install -e .
+
+# If you need server-side execution dependencies, install with:
+pip install -e .[server-side-execution]
+
+# If you want to install test dependencies as well, use:
+pip install -e .[tests]
+
 # Link your development version of the extension with JupyterLab
 jupyter-labextension develop . --overwrite
+
 # Rebuild extension Typescript source after making changes
 jlpm run build
 ```
