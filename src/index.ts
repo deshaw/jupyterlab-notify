@@ -73,6 +73,7 @@ interface IInitialResponse {
   nbmodel_installed: boolean;
   email_configured: boolean;
   slack_configured: boolean;
+  smtp_server_running: boolean;
 }
 
 interface ICellNotification {
@@ -126,7 +127,7 @@ const displayConfigWarning = (
         label: 'Help',
         callback: () =>
           showErrorMessage(`${service} Not Configured`, {
-            message: `Add a ${service.toLowerCase()} configuration to directory listed under the config section of jupyter --paths (e.g., ~/.jupyter/jupyter_notify_config.json) to enable ${service.toLowerCase()} notifications. Example: \n{\n  "${configKey}": "${example}"}-config"\n}. If you've already configured it, there might be an issue. Please check the terminal for errors and review your setup.`,
+            message: `Add a ${service.toLowerCase()} configuration to directory listed under the config section of jupyter --paths (e.g., ~/.jupyter/jupyter_notify_config.json) to enable ${service.toLowerCase()} notifications. Example: \n{\n  "${configKey}": "${example}"}"\n}. If you've already configured it, there might be an issue. Please check the terminal for errors and review your setup.`,
           }),
       },
     ],
@@ -232,6 +233,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       nbmodel_installed: false,
       email_configured: false,
       slack_configured: false,
+      smtp_server_running: false,
     };
 
     try {
@@ -349,8 +351,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
       }
       // Show configuration warnings
-      if (notifySettings.mail && !config.email_configured) {
-        displayConfigWarning('Email', 'email', 'youremail@example.com');
+      if (notifySettings.mail) {
+        if (!config.email_configured) {
+          displayConfigWarning('Email', 'email', 'youremail@example.com');
+        } else if (!config.smtp_server_running) {
+          JupyterNotification.emit('SMTP Server Not Running', 'error', {
+            autoClose: 3000,
+            actions: [
+              {
+                label: 'Help',
+                callback: () =>
+                  showErrorMessage('SMTP server is not running', {
+                    message:
+                      'Email notifications require a local SMTP server running.',
+                  }),
+              },
+            ],
+          });
+        }
       }
       if (notifySettings.slack && !config.slack_configured) {
         displayConfigWarning(
@@ -555,7 +573,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         // Create the button with the correct initial icon
         const button = new ToolbarButton({
-          tooltip: `${MODES[modeId].label} (click to change)`,
+          // TODO: Display a label, that changes dynamically according to notification mode
+          tooltip: 'click to change',
           icon: MODES[modeId].icon, // Set initial icon based on current metadata
           onClick: () => {
             if (notifyMenu.isVisible) {

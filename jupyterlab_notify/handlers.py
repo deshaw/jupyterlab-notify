@@ -50,9 +50,8 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
                 or self.extension_app.slack_channel_name
             )
         )
-        email_configured = bool(self.extension_app.email) and bool(
-            self.extension_app._config.smtp_instance
-        )
+        email_configured = bool(self.extension_app.email)
+        smtp_server_running = bool(self.extension_app._config.smtp_instance)
 
         self.set_status(HTTPStatus.OK)
         self.finish(
@@ -60,6 +59,7 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
                 "nbmodel_installed": self.extension_app.is_listening,
                 "slack_configured": slack_configured,
                 "email_configured": email_configured,
+                "smtp_server_running": smtp_server_running,
             }
         )
 
