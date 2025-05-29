@@ -24,8 +24,9 @@ import {
 } from './icons';
 import { requestAPI } from './handler';
 import { Cell, ICellModel } from '@jupyterlab/cells';
-import { IRenderMimeRegistry, MimeModel } from '@jupyterlab/rendermime';
+import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 import { Menu } from '@lumino/widgets';
+import { BatchNotifier } from './batch_notify';
 
 namespace CommandIDs {
   export const setNotificationMode = 'notify:set-notification-mode';
@@ -41,7 +42,6 @@ const TIMEOUT_OPTIONS = [
 ];
 
 const CELL_METADATA_KEY = 'jupyterlab_notify.notify';
-const MIME_TYPE = 'application/desktop-notify+json';
 
 interface IExecutionTimingMetadata {
   'shell.execute_reply.started': string;
@@ -82,9 +82,20 @@ interface ICellNotification {
   notificationIssued: boolean;
 }
 
+export interface INotificationData {
+  type: string;
+  payload: {
+    title: string;
+    body: string;
+  };
+  isProcessed: boolean;
+  id: string;
+}
+
 // Constants
 const ModeIds = ['default', 'never', 'on-error', 'custom-timeout'] as const;
 type ModeId = (typeof ModeIds)[number];
+export type NotifyType = 'completed' | 'failed' | 'timeout';
 
 const MODES: Record<ModeId, IMode> = {
   default: { label: 'Default', icon: bellOutlineIcon },
@@ -102,7 +113,7 @@ const TIMEOUT_PATTERN = /^(\d+(\.\d+)?)([smh])$/;
 const generateNotificationData = (
   message: string,
   cell_id: string,
-): Record<string, any> => ({
+): INotificationData => ({
   type: 'NOTIFY',
   payload: {
     title: message,
@@ -172,6 +183,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
     settingRegistry: ISettingRegistry | null,
   ) => {
     console.log('JupyterLab extension jupyterlab-notify is activated!');
+
+    const batchNotifier = new BatchNotifier(rendermime);
 
     // Default settings
     let notifySettings: INotifySettings = {
@@ -283,11 +296,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       // Determine appropriate message based on execution state
-      const message = threshold
-        ? 'Cell execution timeout reached'
+      const state: NotifyType = threshold
+        ? 'timeout'
         : success
-        ? notifySettings.successMessage
-        : notifySettings.failureMessage;
+        ? 'completed'
+        : 'failed';
+      const message =
+        state === 'timeout'
+          ? 'Cell execution timeout reached'
+          : state === 'completed'
+          ? notifySettings.successMessage
+          : notifySettings.failureMessage;
 
       const notificationData = generateNotificationData(message, cellId);
 
@@ -303,11 +322,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       try {
-        const mimeModel = new MimeModel({
-          data: { [MIME_TYPE]: notificationData },
-        });
-        const renderer = rendermime.createRenderer(MIME_TYPE);
-        await renderer.renderModel(mimeModel);
+        batchNotifier.notify(state, notificationData);
         notification.notificationIssued = true;
       } catch (err) {
         console.error('Error rendering notification:', err);
@@ -488,12 +503,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
       execute: async () => {
         const result = await InputDialog.getText({
           title: 'Set Custom Timeout',
-          label: 'Enter timeout (e.g., 120s, 45m, 1h):',
-          placeholder: 'e.g., 120s',
+          label: 'Default: seconds, +m for minutes, +h for hours:',
+          placeholder: '120 or 45m',
         });
         if (result.button.accept && result.value) {
-          const input = result.value.trim();
-          if (!TIMEOUT_PATTERN.test(input)) {
+          const rawInput = result.value.trim();
+          const lastChar = rawInput.slice(-1);
+          const input =
+            rawInput === ''
+              ? ''
+              : ['s', 'm', 'h'].includes(lastChar)
+              ? rawInput
+              : rawInput + 's';
+
+          if (!rawInput || !TIMEOUT_PATTERN.test(input)) {
             await showErrorMessage(
               'Invalid Input',
               'Please enter a positive number followed by s (seconds), m (minutes), or h (hours) — e.g., 120s, 45m, 1h.',
