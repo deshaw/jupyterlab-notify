@@ -66,8 +66,15 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
 
     if (!mimeData[PROCESSED_KEY]) {
       // Add isProcessed property to each notification message so that we can avoid repeating notifications on page reloads
-      const updatedMimeData = { ...mimeData, [PROCESSED_KEY]: true };
-      const newData = { ...model.data, [this._mimeType]: updatedMimeData };
+      const updatedModel = JSON.parse(JSON.stringify(model));
+      // The model sent by IPython magic via display contains a 'data' property,
+      // whereas the model sent by the frontend via MimeModel (after JSON serialization)
+      // contains only the private property '_data'.
+      const dataKey = 'data' in updatedModel ? 'data' : '_data';
+      const updatedMimeData = updatedModel[dataKey][
+        this._mimeType
+      ] as unknown as INotifyMimeData;
+      updatedMimeData[PROCESSED_KEY] = true;
       // The below model update is done inside a separate function and added to
       // the event queue - this is done so to avoid re-rendering before the
       // initial render is complete.
@@ -76,7 +83,7 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
       // registered on model-updates that re-renders the widget and it again tries
       // to update the model which again causes a re-render and so on.
       setTimeout(() => {
-        model.setData(newData);
+        model.setData(updatedModel);
       }, 0);
     }
 
