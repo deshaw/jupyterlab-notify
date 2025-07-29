@@ -1,5 +1,6 @@
+import { INotebookTracker, NotebookPanel } from '@jupyterlab/notebook';
 import { IRenderMime } from '@jupyterlab/rendermime-interfaces';
-
+import { ILabShell } from '@jupyterlab/application';
 import { JSONObject } from '@lumino/coreutils';
 
 import { Widget } from '@lumino/widgets';
@@ -25,9 +26,15 @@ interface INotifyMimeData {
  * A widget for rendering desktop-notify.
  */
 class OutputWidget extends Widget implements IRenderMime.IRenderer {
-  constructor(options: IRenderMime.IRendererOptions) {
+  constructor(
+    options: IRenderMime.IRendererOptions,
+    notebookTracker: INotebookTracker,
+    shell: ILabShell,
+  ) {
     super();
     this._mimeType = options.mimeType;
+    this._notebookTracker = notebookTracker;
+    this._shell = shell;
   }
 
   renderModel(model: IRenderMime.IMimeModel): Promise<void> {
@@ -58,7 +65,24 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
     if (mimeData.type === 'NOTIFY') {
       // Notify only if there's sufficient permissions and this has not been processed previously
       if (Notification.permission === 'granted' && !mimeData[PROCESSED_KEY]) {
-        new Notification(payload.title as string, NOTIFICATION_OPTIONS);
+        const notification = new Notification(
+          payload.title as string,
+          NOTIFICATION_OPTIONS,
+        );
+        // Set up click handler
+        notification.onclick = event => {
+          event.preventDefault();
+
+          window.focus();
+
+          // Navigate to the cell
+          this.navigateToCell(
+            payload.cellId as string,
+            payload.notebookId as string,
+          );
+
+          notification.close();
+        };
       } else {
         this.node.innerHTML = `<div id="${mimeData.id}">Missing permissions - update "Notifications" preferences under browser settings to receive notifications</div>`;
       }
@@ -89,28 +113,104 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
 
     return Promise.resolve();
   }
+  private async navigateToCell(
+    cellId: string,
+    notebookId: string,
+  ): Promise<void> {
+    try {
+      const targetNotebook = this.findNotebookById(notebookId);
+      if (!targetNotebook) {
+        return;
+      }
+
+      // Switch to the target notebook if it's not current
+      if (this._notebookTracker.currentWidget?.id !== targetNotebook.id) {
+        targetNotebook.activate();
+        this._shell.activateById(targetNotebook.id);
+        // Ensure notebook is fully activated
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      this.navigateToCellInNotebook(targetNotebook, cellId);
+    } catch (error) {
+      // Silently ignore errors
+    }
+  }
+
+  private findNotebookById(notebookId: string): null | NotebookPanel {
+    // Search through all open notebooks
+    let found = null;
+    this._notebookTracker.forEach(widget => {
+      if (widget.content.id === notebookId) {
+        found = widget;
+      }
+    });
+    return found;
+  }
+
+  private navigateToCellInNotebook(notebook: any, cellId: string): boolean {
+    const cells = notebook.content.widgets;
+    const cellIndex = cells.findIndex((cell: any) => cell.model.id === cellId);
+
+    if (cellIndex >= 0) {
+      notebook.content.activeCellIndex = cellIndex;
+
+      const targetCell = cells[cellIndex];
+
+      requestAnimationFrame(() => {
+        targetCell.node.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'nearest',
+        });
+
+        // Add brief highlight effect
+        this.highlightCell(targetCell);
+      });
+
+      return true;
+    }
+
+    return false;
+  }
+
+  private highlightCell(cell: any): void {
+    const cellNode = cell.node;
+    const originalBackground = cellNode.style.backgroundColor;
+    const originalTransition = cellNode.style.transition;
+
+    // Add highlight with animation
+    cellNode.style.transition = 'background-color 0.3s ease';
+    cellNode.style.backgroundColor = '#fff3cd';
+
+    setTimeout(() => {
+      cellNode.style.backgroundColor = originalBackground;
+
+      setTimeout(() => {
+        cellNode.style.transition = originalTransition;
+      }, 300);
+    }, 1000);
+  }
 
   private _mimeType: string;
+  private _notebookTracker: INotebookTracker;
+  private _shell: ILabShell;
 }
 
 /**
- * A mime renderer factory for desktop-notify data.
+ * Function for creating a mime renderer factory for desktop-notify data.
+ * This has been implemented this way for adding tracker and shell from main plugin
  */
-const rendererFactory: IRenderMime.IRendererFactory = {
-  safe: true,
-  mimeTypes: [MIME_TYPE],
-  createRenderer: options => new OutputWidget(options),
-};
-
-/**
- * Extension definition.
- */
-const rendererExtension: IRenderMime.IExtension = {
-  id: 'jupyterlab-notify:mime',
-  rendererFactory,
-  rank: 0,
-  dataType: 'json',
-};
-console.log('jupyterlab-notify render loaded');
-
-export default rendererExtension;
+export function createRendererFactory(
+  notebookTracker: INotebookTracker,
+  shell: ILabShell,
+): IRenderMime.IRendererFactory {
+  return {
+    safe: true,
+    mimeTypes: [MIME_TYPE],
+    createRenderer: options => {
+      const widget = new OutputWidget(options, notebookTracker, shell);
+      return widget;
+    },
+  };
+}

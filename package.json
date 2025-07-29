@@ -82,7 +82,6 @@
     "yjs": "^13.5.40"
   },
   "jupyterlab": {
-    "mimeExtension": "lib/mime.js",
     "extension": "lib/index.js",
     "outputDir": "jupyterlab_notify/labextension",
     "schemaDir": "schema"

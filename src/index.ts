@@ -27,6 +27,7 @@ import { Cell, ICellModel } from '@jupyterlab/cells';
 import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 import { Menu } from '@lumino/widgets';
 import { BatchNotifier } from './batch_notify';
+import { createRendererFactory } from './mime';
 
 namespace CommandIDs {
   export const setNotificationMode = 'notify:set-notification-mode';
@@ -87,6 +88,8 @@ export interface INotificationData {
   payload: {
     title: string;
     body: string;
+    cellId: string;
+    notebookId: string;
   };
   isProcessed: boolean;
   id: string;
@@ -113,11 +116,14 @@ const TIMEOUT_PATTERN = /^(\d+(\.\d+)?)([smh])$/;
 const generateNotificationData = (
   message: string,
   cell_id: string,
+  notebookId: string,
 ): INotificationData => ({
   type: 'NOTIFY',
   payload: {
     title: message,
     body: `Cell id: ${cell_id}`,
+    cellId: cell_id,
+    notebookId: notebookId,
   },
   isProcessed: false,
   id: `notify-${Math.random().toString(36).substring(2)}`,
@@ -185,6 +191,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
     console.log('JupyterLab extension jupyterlab-notify is activated!');
 
     const batchNotifier = new BatchNotifier(rendermime);
+    // Ensure app.shell is an ILabShell
+    const labShell = app.shell as any;
+    const rendererFactory = createRendererFactory(tracker, labShell);
+    // Register the mime extension for the rendermime registry
+    rendermime.addFactory(rendererFactory, 0);
 
     // Default settings
     let notifySettings: INotifySettings = {
@@ -263,6 +274,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     const handleNotification = async (
       cell: ICellModel,
       success: boolean,
+      notebookId: string,
       threshold = false,
     ): Promise<void> => {
       const cellId = cell.id;
@@ -308,7 +320,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
           ? notifySettings.successMessage
           : notifySettings.failureMessage;
 
-      const notificationData = generateNotificationData(message, cellId);
+      const notificationData = generateNotificationData(
+        message,
+        cellId,
+        notebookId,
+      );
 
       if (!config.nbmodel_installed) {
         try {
@@ -336,7 +352,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Execution listeners
     NotebookActions.executed.connect((_, args) => {
-      handleNotification(args.cell.model, args.success);
+      handleNotification(args.cell.model, args.success, args.notebook.id);
     });
 
     NotebookActions.executionScheduled.connect(async (_, args) => {
@@ -457,7 +473,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (payload.mode === 'custom-timeout') {
         notification.timeoutId = setTimeout(() => {
           if (!notification.notificationIssued) {
-            handleNotification(cell.model, true, true);
+            handleNotification(cell.model, true, args.notebook.id, true);
           }
         }, payload.threshold! * 1000);
       }
