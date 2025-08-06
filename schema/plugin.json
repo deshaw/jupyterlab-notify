@@ -4,11 +4,23 @@
   "description": "jupyterlab-notify settings.",
   "jupyter.lab.setting-icon": "notify:bell-outline",
   "jupyter.lab.toolbars": {
-    "Cell": [
+    "Notebook": [
       {
-        "name": "notify",
-        "command": "notify:toggle-cell-notifications"
+        "name": "notifyType",
+        "rank": 80
       },
+      {
+        "name": "setNotebookCustomTimeout",
+        "command": "notify:set-notebook-custom-timeout",
+        "rank": 901
+      },
+      {
+        "name": "setNotebookDefaultThreshold",
+        "command": "notify:set-notebook-default-threshold",
+        "rank": 902
+      }
+    ],
+    "Cell": [
       {
         "name": "notifyMenu",
         "rank": 100
@@ -26,6 +38,13 @@
     "defaultThreshold": {
       "title": "Threshold for default notification",
       "description": "Default threshold value (unit in seconds)",
+      "type": ["number", "null"],
+      "default": 30,
+      "minimum": 0
+    },
+    "customTimeout": {
+      "title": "Timeout value for timeout notifications",
+      "description": "Default timeout value for custom-timeout notification (unit in seconds)",
       "type": ["number", "null"],
       "default": 30,
       "minimum": 0
