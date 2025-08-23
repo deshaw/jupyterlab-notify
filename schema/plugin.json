@@ -22,7 +22,7 @@
     ],
     "Cell": [
       {
-        "name": "notifyMenu",
+        "name": "cellNotifyMenu",
         "rank": 100
       }
     ]

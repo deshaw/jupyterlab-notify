@@ -10,13 +10,17 @@ import {
 } from '@jupyterlab/notebook';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { ITranslator, nullTranslator } from '@jupyterlab/translation';
-import { LabIcon, ToolbarButton } from '@jupyterlab/ui-components';
+import {
+  LabIcon,
+  ToolbarButton,
+  settingsIcon,
+} from '@jupyterlab/ui-components';
 import {
   IToolbarWidgetRegistry,
   showErrorMessage,
   Notification as JupyterNotification,
-  InputDialog,
 } from '@jupyterlab/apputils';
+import { TimeInputDialog, TimeUnit } from './utils';
 import {
   bellOutlineIcon,
   bellOffIcon,
@@ -29,7 +33,7 @@ import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 import { Menu } from '@lumino/widgets';
 import { BatchNotifier } from './batch_notify';
 import { createRendererFactory } from './mime';
-import { NotificationModeSwitcher } from './notebook-toolbar';
+import { caretSVG } from './utils';
 
 namespace CommandIDs {
   export const setNotificationMode = 'notify:set-notification-mode';
@@ -37,6 +41,9 @@ namespace CommandIDs {
   export const setNotebookCustomTimeout = 'notify:set-notebook-custom-timeout';
   export const setNotebookDefaultThreshold =
     'notify:set-notebook-default-threshold';
+  export const openNotificationSettings = 'notify:open-notification-settings';
+  export const setNotebookNotificationMode =
+    'notify:set-notebook-notification-mode';
 }
 
 // Timeout options for the submenu
@@ -50,6 +57,7 @@ const TIMEOUT_OPTIONS = [
 const NOTIFY_METADATA_KEY = 'jupyterlab_notify.notify';
 const NOTEBOOK_DEFAULT_THRESHOLD_KEY = 'defaultThreshold';
 const NOTEBOOK_CUSTOM_TIMEOUT_KEY = 'customTimeout';
+const NB_TOOLBAR_NOTIFICATION_CLASS = 'jp-Toolbar-notification-mode';
 
 interface IExecutionTimingMetadata {
   'shell.execute_reply.started': string;
@@ -108,11 +116,27 @@ const ModeIds = ['default', 'never', 'on-error', 'custom-timeout'] as const;
 type ModeId = (typeof ModeIds)[number];
 export type NotifyType = 'completed' | 'failed' | 'timeout';
 
-const MODES: Record<ModeId, IMode> = {
-  default: { label: 'Default', icon: bellOutlineIcon },
-  never: { label: 'Never', icon: bellOffIcon },
-  'on-error': { label: 'On error', icon: bellAlertIcon },
-  'custom-timeout': { label: 'Custom Timeout', icon: bellClockIcon },
+const MODES: Record<ModeId, IMode & { info: string }> = {
+  default: {
+    label: 'Default',
+    icon: bellOutlineIcon,
+    info: 'Notify after cell finishes execution if it exceeds the default threshold.',
+  },
+  never: {
+    label: 'Never',
+    icon: bellOffIcon,
+    info: 'Never send notifications for this cell.',
+  },
+  'on-error': {
+    label: 'On error',
+    icon: bellAlertIcon,
+    info: 'Notify only if cell execution fails.',
+  },
+  'custom-timeout': {
+    label: 'Custom Timeout',
+    icon: bellClockIcon,
+    info: 'Notify after a custom timeout, regardless of execution result.',
+  },
 };
 
 // Regular expression for validating timeout input
@@ -180,6 +204,42 @@ function decodeThresholdToSeconds(threshold: string | number) {
     default:
       return null;
   }
+}
+
+/**
+ * Parses a threshold string like '2s', '5m', '1.5h' and returns value and TimeUnit.
+ * Returns null if the input is invalid.
+ */
+function parseThreshold(
+  threshold?: string | number,
+): { value: number; unit: TimeUnit } | null {
+  if (!threshold) {
+    return null;
+  }
+  if (typeof threshold === 'number') {
+    return { value: threshold, unit: TimeUnit.SECONDS };
+  }
+  const match = threshold.match(/^(\d+(\.\d+)?)([smh])$/);
+  if (!match) {
+    return null;
+  }
+  const value = parseFloat(match[1]);
+  const unitChar = match[3];
+  let unit: TimeUnit;
+  switch (unitChar) {
+    case 's':
+      unit = TimeUnit.SECONDS;
+      break;
+    case 'm':
+      unit = TimeUnit.MINUTES;
+      break;
+    case 'h':
+      unit = TimeUnit.HOURS;
+      break;
+    default:
+      return null;
+  }
+  return { value, unit };
 }
 
 /**
@@ -259,14 +319,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const mode = nbMetadata?.mode ?? notifySettings.defaultMode;
       if (mode === 'default') {
         // Use threshold from notebook metadata's NOTEBOOK_DEFAULT_THRESHOLD_KEY if present
-        const nbThreshold = nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
+        let nbThreshold = nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
+        if (typeof nbThreshold === 'number') {
+          nbThreshold = `${nbThreshold}s`;
+        }
         cell.setMetadata(NOTIFY_METADATA_KEY, {
           mode,
           ...(nbThreshold ? { threshold: nbThreshold } : {}),
         });
       } else if (mode === 'custom-timeout') {
         // Use threshold from notebook metadata's NOTEBOOK_CUSTOM_TIMEOUT_KEY if present
-        const nbCustomTimeout = nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY];
+        let nbCustomTimeout = nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY];
+        if (typeof nbCustomTimeout === 'number') {
+          nbCustomTimeout = `${nbCustomTimeout}s`;
+        }
         cell.setMetadata(NOTIFY_METADATA_KEY, {
           mode,
           ...(nbCustomTimeout ? { threshold: nbCustomTimeout } : {}),
@@ -542,7 +608,42 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
     const trans = (translator ?? nullTranslator).load('jupyterlab-notify');
 
-    // Command to set notification mode and threshold
+    // Add command to open Settings
+    app.commands.addCommand(CommandIDs.openNotificationSettings, {
+      label: trans.__('Settings..'),
+      icon: settingsIcon,
+      execute: () => {
+        app.commands.execute('settingeditor:open', {
+          query: 'Execution Notifications',
+        });
+      },
+    });
+
+    // Command to set Notebook notificaion mode
+    app.commands.addCommand(CommandIDs.setNotebookNotificationMode, {
+      label: args => {
+        if (args.label) {
+          return args.label as string;
+        }
+        const modeId = args.modeId as ModeId;
+        return MODES[modeId].label;
+      },
+      icon: args => MODES[args.modeId as ModeId].icon,
+      execute: args => {
+        const modeId = args.modeId;
+        const notebook = tracker.currentWidget;
+        if (notebook && notebook.model) {
+          // Update the notebook metadata properly
+          const prev = notebook.model.getMetadata(NOTIFY_METADATA_KEY) || {};
+          notebook.model.setMetadata(NOTIFY_METADATA_KEY, {
+            ...prev,
+            mode: modeId,
+          });
+        }
+      },
+    });
+
+    // Command to set Cell notification mode and threshold
     app.commands.addCommand(CommandIDs.setNotificationMode, {
       label: args => {
         if (args.label) {
@@ -595,16 +696,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
       label: string;
       placeholder: string;
       errorMessage: string;
+      defaultValue?: number;
+      defaultUnit?: TimeUnit;
     }): Promise<string | null> {
-      const result = await InputDialog.getText({
+      const timeResult = await TimeInputDialog.getText({
         title: options.title,
         label: options.label,
         placeholder: options.placeholder,
+        defaultValue: options.defaultValue,
+        defaultUnit: options.defaultUnit,
       });
-      if (!result.button.accept || !result.value) {
-        return null;
-      }
-      const rawInput = result.value.trim();
+      const rawInput =
+        String(timeResult?.value) +
+        (timeResult?.unit ? timeResult.unit[0] : 's');
       const lastChar = rawInput.slice(-1);
       const input =
         rawInput === ''
@@ -614,7 +718,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
           : rawInput + 's';
 
       if (!rawInput || !TIMEOUT_PATTERN.test(input)) {
-        await showErrorMessage('Invalid Input', options.errorMessage);
         return null;
       }
       return input;
@@ -630,15 +733,26 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (!current || !current.content || !current.model) {
           return;
         }
+        const prev = current.model.getMetadata(NOTIFY_METADATA_KEY) || {};
+        let value: number | undefined = undefined;
+        let unit: TimeUnit | undefined = undefined;
+        if (prev[NOTEBOOK_CUSTOM_TIMEOUT_KEY]) {
+          const parsed = parseThreshold(prev[NOTEBOOK_CUSTOM_TIMEOUT_KEY]);
+          if (parsed) {
+            value = parsed.value;
+            unit = parsed.unit;
+          }
+        }
         const input = await promptForTimeout({
           title: 'Set Notebook Custom Timeout',
-          label: 'Default: seconds, +m for minutes, +h for hours:',
-          placeholder: '120 or 45m',
+          label: 'Custom timeout value with unit:',
+          placeholder: '30',
           errorMessage:
-            'Please enter a positive number followed by s (seconds), m (minutes), or h (hours) — e.g., 120s, 45m, 1h.',
+            'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+          defaultValue: value,
+          defaultUnit: unit,
         });
         if (input) {
-          const prev = current.model.getMetadata(NOTIFY_METADATA_KEY) || {};
           current.model.setMetadata(NOTIFY_METADATA_KEY, {
             ...prev,
             [NOTEBOOK_CUSTOM_TIMEOUT_KEY]: input,
@@ -657,12 +771,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (!current || !current.content || !current.model) {
           return;
         }
+        const prev = current.model.getMetadata(NOTIFY_METADATA_KEY) || {};
+        let value: number | undefined = undefined;
+        let unit: TimeUnit | undefined = undefined;
+        if (prev[NOTEBOOK_DEFAULT_THRESHOLD_KEY]) {
+          const parsed = parseThreshold(prev[NOTEBOOK_DEFAULT_THRESHOLD_KEY]);
+          if (parsed) {
+            value = parsed.value;
+            unit = parsed.unit;
+          }
+        }
         const input = await promptForTimeout({
           title: 'Set Notebook Default Threshold',
-          label: 'Default: seconds, +m for minutes, +h for hours:',
-          placeholder: '30 or 1m',
+          label: 'Default Threshold value with unit:',
+          placeholder: '30',
           errorMessage:
-            'Please enter a positive number followed by s (seconds), m (minutes), or h (hours) — e.g., 30s, 1m, 1h.',
+            'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+          defaultValue: value,
+          defaultUnit: unit,
         });
         if (input) {
           const prev = current.model.getMetadata(NOTIFY_METADATA_KEY) || {};
@@ -675,14 +801,31 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     app.commands.addCommand(CommandIDs.setCustomTimeout, {
+      caption: 'DP_HERO',
       label: trans.__('Custom'),
       execute: async () => {
+        const current = tracker.currentWidget;
+        let value: number | undefined = undefined;
+        let unit: TimeUnit | undefined = undefined;
+        if (current && current.content && current.content.activeCell) {
+          const cell = current.content.activeCell;
+          const prev = cell.model.getMetadata(NOTIFY_METADATA_KEY) || {};
+          if (prev.threshold) {
+            const parsed = parseThreshold(prev.threshold);
+            if (parsed) {
+              value = parsed.value;
+              unit = parsed.unit;
+            }
+          }
+        }
         const input = await promptForTimeout({
           title: 'Set Custom Timeout',
-          label: 'Default: seconds, +m for minutes, +h for hours:',
-          placeholder: '120 or 45m',
+          label: 'Custom timeout value with unit:',
+          placeholder: '30',
           errorMessage:
-            'Please enter a positive number followed by s (seconds), m (minutes), or h (hours) — e.g., 120s, 45m, 1h.',
+            'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+          defaultValue: value,
+          defaultUnit: unit,
         });
         if (input) {
           await app.commands.execute(CommandIDs.setNotificationMode, {
@@ -693,10 +836,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
       },
     });
 
-    // Menu for Notification modes
-    const notifyMenu = new Menu({ commands: app.commands });
-    notifyMenu.addClass('jp-notify-menu');
-    notifyMenu.title.label = trans.__('Cell Notification');
+    // Menu for Cell Notification modes
+    const cellNotifyMenu = new Menu({ commands: app.commands });
+    cellNotifyMenu.addClass('jp-notify-menu');
+    cellNotifyMenu.title.label = trans.__('Cell Notification');
 
     Object.entries(MODES).forEach(([modeId, mode]) => {
       if (modeId === 'custom-timeout') {
@@ -730,9 +873,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
             });
           }
         });
-        notifyMenu.addItem({ type: 'submenu', submenu: subMenu });
+        cellNotifyMenu.addItem({ type: 'submenu', submenu: subMenu });
       } else if (modeId === 'default') {
-        notifyMenu.addItem({
+        cellNotifyMenu.addItem({
           command: CommandIDs.setNotificationMode,
           args: {
             modeId,
@@ -740,21 +883,164 @@ const plugin: JupyterFrontEndPlugin<void> = {
           },
         });
       } else {
-        notifyMenu.addItem({
+        cellNotifyMenu.addItem({
           command: CommandIDs.setNotificationMode,
           args: { modeId },
         });
       }
     });
+    // Add Settings Shortcut
+    cellNotifyMenu.addItem({
+      type: 'separator',
+    });
+    cellNotifyMenu.addItem({
+      type: 'command',
+      command: CommandIDs.openNotificationSettings,
+    });
+    // Add "DP hero" title attribute to all li.lm-Menu-item under cellNotifyMenu
 
-    // Helper function to update the button's icon
-    function updateButtonIcon(button: ToolbarButton, cell: ICellModel) {
+    setTimeout(() => {
+      cellNotifyMenu.node
+        .querySelectorAll('ul.lm-Menu-content > li.lm-Menu-item')
+        .forEach(li => {
+          const labelDiv = li.querySelector('.lm-Menu-itemLabel');
+          let modeId = '';
+          if (labelDiv && labelDiv.textContent) {
+            modeId = labelDiv.textContent
+              .trim()
+              .toLowerCase()
+              .replace(/\s+/g, '-');
+          }
+          if (Object.prototype.hasOwnProperty.call(MODES, modeId)) {
+            li.setAttribute('title', MODES[modeId as ModeId].info ?? '');
+          } else if (modeId === 'settings..') {
+            li.setAttribute('title', 'Go to Notification Settings');
+          }
+        });
+    }, 0);
+
+    // Menu for Cell Notification modes
+    const nbNotifyMenu = new Menu({ commands: app.commands });
+    nbNotifyMenu.addClass('jp-notify-menu');
+    nbNotifyMenu.title.label = trans.__('Notebook Notification');
+
+    Object.entries(MODES).forEach(([modeId, mode]) => {
+      if (modeId === 'custom-timeout') {
+        nbNotifyMenu.addItem({
+          command: CommandIDs.setNotebookNotificationMode,
+          args: {
+            modeId,
+          },
+        });
+      } else if (modeId === 'default') {
+        nbNotifyMenu.addItem({
+          command: CommandIDs.setNotebookNotificationMode,
+          args: {
+            modeId,
+          },
+        });
+      } else {
+        nbNotifyMenu.addItem({
+          command: CommandIDs.setNotebookNotificationMode,
+          args: { modeId },
+        });
+      }
+    });
+
+    // Add Settings Shortcut
+    nbNotifyMenu.addItem({
+      type: 'separator',
+    });
+    nbNotifyMenu.addItem({
+      type: 'command',
+      command: CommandIDs.setNotebookDefaultThreshold,
+    });
+    nbNotifyMenu.addItem({
+      type: 'command',
+      command: CommandIDs.setNotebookCustomTimeout,
+    });
+
+    setTimeout(() => {
+      nbNotifyMenu.node
+        .querySelectorAll('ul.lm-Menu-content > li.lm-Menu-item')
+        .forEach(li => {
+          const labelDiv = li.querySelector('.lm-Menu-itemLabel');
+          let modeId = '';
+          if (labelDiv && labelDiv.textContent) {
+            modeId = labelDiv.textContent
+              .trim()
+              .toLowerCase()
+              .replace(/\s+/g, '-');
+          }
+          if (Object.prototype.hasOwnProperty.call(MODES, modeId)) {
+            li.setAttribute('title', MODES[modeId as ModeId].info ?? '');
+          } else if (modeId === 'set-default-threshold') {
+            li.setAttribute(
+              'title',
+              'Set value of default notification threshold for this notebook',
+            );
+          } else if (modeId === 'set-custom-timeout') {
+            li.setAttribute(
+              'title',
+              'Set value of custom notification timeout for this notebook',
+            );
+          }
+        });
+    }, 0);
+
+    // Helper function to update the cell toolbar button on metadata change
+    function updateCellToolbarButton(button: ToolbarButton, cell: ICellModel) {
       const metadata = cell.getMetadata(NOTIFY_METADATA_KEY) as
         | ICellMetadata
         | undefined;
       const modeId = metadata?.mode ?? notifySettings.defaultMode;
       const newIcon = MODES[modeId].icon;
 
+      // Replace the tooltip
+      let tooltip = MODES[modeId].label;
+      if (
+        (modeId === 'default' || modeId === 'custom-timeout') &&
+        metadata?.threshold
+      ) {
+        tooltip += ` (${metadata.threshold})`;
+      }
+      tooltip += '\nClick to change';
+      const jpButton = button.node.querySelector('jp-button');
+      if (jpButton) {
+        jpButton.setAttribute('aria-label', trans.__(tooltip));
+        jpButton.setAttribute('title', trans.__(tooltip));
+      }
+      // Replace the SVG in the button
+      const svgElement = button.node.querySelector('svg');
+      if (svgElement) {
+        svgElement.outerHTML = newIcon.svgstr;
+      } else {
+        // Fallback if no SVG is present
+        button.node.innerHTML = newIcon.svgstr;
+      }
+    }
+
+    // Helper function to update notebook toolbar button on metadata change
+    function updateNbToolbarButton(
+      button: ToolbarButton,
+      notebook: INotebookModel,
+    ) {
+      const metadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
+        | ICellMetadata
+        | undefined;
+      const modeId = metadata?.mode ?? notifySettings.defaultMode;
+      const newIcon = MODES[modeId].icon;
+      const labelElement = button.node.querySelector(
+        '.jp-ToolbarButtonComponent-label',
+      );
+      if (labelElement) {
+        labelElement.textContent = trans.__(MODES[modeId].label);
+        // Insert caret-down icon after label
+        const caretSpan = document.createElement('span');
+        caretSpan.className = 'jp-notify-toolbar-caret';
+        caretSpan.innerHTML = caretSVG;
+        labelElement.appendChild(caretSpan);
+      }
       // Replace the SVG in the button
       const svgElement = button.node.querySelector('svg');
       if (svgElement) {
@@ -767,33 +1053,82 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Toolbar factory for per-cell toolbar
     if (toolbarRegistry) {
+      // toolbarRegistry.addFactory<NotebookPanel>(
+      //   'Notebook',
+      //   'notifyType',
+      //   args => {
+      //     return new NotificationModeSwitcher(args, notifySettings, translator);
+      //   },
+      // );
       toolbarRegistry.addFactory<NotebookPanel>(
         'Notebook',
         'notifyType',
         args => {
-          return new NotificationModeSwitcher(args, notifySettings, translator);
+          const notebook = args.model!;
+
+          const metadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
+            | ICellMetadata
+            | undefined;
+          const modeId = metadata?.mode ?? notifySettings.defaultMode;
+          const icon = MODES[modeId].icon;
+          const labelElement = trans.__(MODES[modeId].label);
+
+          const button = new ToolbarButton({
+            label: labelElement,
+            tooltip: trans.__(
+              'Set notification settings for this notebook\nAll newly created cells in this notebook will use this type.',
+            ),
+            icon,
+            onClick: () => {
+              if (nbNotifyMenu.isVisible) {
+                nbNotifyMenu.close();
+              } else {
+                const rect = button.node.getBoundingClientRect();
+                nbNotifyMenu.open(rect.right, rect.bottom, {
+                  horizontalAlignment: 'right',
+                });
+              }
+            },
+          });
+          button.addClass(NB_TOOLBAR_NOTIFICATION_CLASS);
+
+          // Connect metadataChanged signal to update the icon dynamically
+          notebook.metadataChanged.connect(() => {
+            updateNbToolbarButton(button, notebook);
+          });
+
+          return button;
         },
       );
 
-      toolbarRegistry.addFactory<Cell>('Cell', 'notifyMenu', args => {
-        const cell = args.model as ICellModel;
+      toolbarRegistry.addFactory<Cell>('Cell', 'cellNotifyMenu', args => {
+        const cell = args.model;
 
         const metadata = cell.getMetadata(NOTIFY_METADATA_KEY) as
           | ICellMetadata
           | undefined;
         const modeId = metadata?.mode ?? notifySettings.defaultMode; // Fallback to default if metadata is unset
-
+        let tooltip = MODES[modeId].label;
+        if (
+          (modeId === 'default' || modeId === 'custom-timeout') &&
+          metadata?.threshold
+        ) {
+          tooltip += ` (${metadata.threshold})`;
+        }
+        tooltip += '\nClick to change';
         // Create the button with the correct initial icon
         const button = new ToolbarButton({
-          tooltip: trans.__('click to change'),
+          tooltip: trans.__(tooltip),
           icon: MODES[modeId].icon, // Set initial icon based on current metadata
           onClick: () => {
-            if (notifyMenu.isVisible) {
+            if (cellNotifyMenu.isVisible) {
               //TODO: fix closing
-              notifyMenu.close();
+              console.log('It is actually visible!');
+              cellNotifyMenu.close();
             } else {
+              console.log('It is not visible!');
               const rect = button.node.getBoundingClientRect();
-              notifyMenu.open(rect.right, rect.bottom, {
+              cellNotifyMenu.open(rect.right, rect.bottom, {
                 horizontalAlignment: 'right',
               });
             }
@@ -802,7 +1137,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         // Connect metadataChanged signal to update the icon dynamically
         cell.metadataChanged.connect(() => {
-          updateButtonIcon(button, cell);
+          updateCellToolbarButton(button, cell);
         });
 
         return button;
