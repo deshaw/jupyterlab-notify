@@ -20,7 +20,8 @@ import {
   showErrorMessage,
   Notification as JupyterNotification,
 } from '@jupyterlab/apputils';
-import { TimeInputDialog, TimeUnit } from './utils';
+import { TimeInputDialog } from './utils';
+import { TimeUnit } from './timeInput';
 import {
   bellOutlineIcon,
   bellOffIcon,
@@ -30,7 +31,7 @@ import {
 import { requestAPI } from './handler';
 import { Cell, ICellModel } from '@jupyterlab/cells';
 import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
-import { Menu } from '@lumino/widgets';
+import { MenuSvg } from '@jupyterlab/ui-components';
 import { BatchNotifier } from './batch_notify';
 import { createRendererFactory } from './mime';
 import { caretSVG } from './utils';
@@ -837,13 +838,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     // Menu for Cell Notification modes
-    const cellNotifyMenu = new Menu({ commands: app.commands });
+    const cellNotifyMenu = new MenuSvg({ commands: app.commands });
     cellNotifyMenu.addClass('jp-notify-menu');
     cellNotifyMenu.title.label = trans.__('Cell Notification');
 
     Object.entries(MODES).forEach(([modeId, mode]) => {
       if (modeId === 'custom-timeout') {
-        const subMenu = new Menu({ commands: app.commands });
+        const subMenu = new MenuSvg({ commands: app.commands });
         subMenu.title.label = mode.label;
         subMenu.title.icon = mode.icon;
         TIMEOUT_OPTIONS.forEach(option => {
@@ -920,7 +921,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     }, 0);
 
     // Menu for Cell Notification modes
-    const nbNotifyMenu = new Menu({ commands: app.commands });
+    const nbNotifyMenu = new MenuSvg({ commands: app.commands });
     nbNotifyMenu.addClass('jp-notify-menu');
     nbNotifyMenu.title.label = trans.__('Notebook Notification');
 
@@ -1123,10 +1124,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
           onClick: () => {
             if (cellNotifyMenu.isVisible) {
               //TODO: fix closing
-              console.log('It is actually visible!');
               cellNotifyMenu.close();
             } else {
-              console.log('It is not visible!');
               const rect = button.node.getBoundingClientRect();
               cellNotifyMenu.open(rect.right, rect.bottom, {
                 horizontalAlignment: 'right',

@@ -6,12 +6,12 @@
   justify-content: center;
 }
 
-.jp-notify-menu .lm-Menu-itemIcon > svg {
-  vertical-align: sub;
-}
-
 .jp-Toolbar-notification-mode svg {
   margin-right: 5px;
+}
+
+.jp-notify-menu .lm-Menu-itemIcon > svg {
+  vertical-align: sub;
 }
 
 .jp-notify-toolbar-caret {
@@ -24,45 +24,53 @@
   padding: 16px;
   min-width: 300px;
 }
+
 .jp-notify-time-input-label {
   display: block;
   margin-bottom: 8px;
   font-weight: 500;
   font-size: var(--jp-ui-font-size1);
 }
+
 .jp-notify-time-input-container {
   display: flex;
   gap: 8px;
   align-items: center;
 }
+
 .jp-notify-time-input-field {
   flex: 1;
   padding: 6px 12px;
   font-family: var(--jp-ui-font-family);
   transition: border-color 0.2s;
 }
+
 .jp-notify-time-input-field:focus {
   border-color: var(--jp-brand-color1);
   box-shadow: 0 0 0 1px var(--jp-brand-color1);
 }
+
 .jp-notify-time-input-field:invalid {
   border-color: var(--jp-error-color1);
 }
+
 .jp-notify-time-unit-select {
   font-family: var(--jp-ui-font-family);
   cursor: pointer;
   min-width: 100px;
 }
+
 .jp-notify-time-unit-select:focus {
   border-color: var(--jp-brand-color1);
   box-shadow: 0 0 0 1px var(--jp-brand-color1);
 }
+
 .jp-notify-time-input-error {
   color: var(--jp-error-color1);
   font-size: var(--jp-ui-font-size0);
   margin-top: 4px;
-  display: none;
 }
+
 .jp-select-wrapper:has(> .jp-notify-time-unit-select.jp-mod-styled) {
   margin-bottom: 0;
 }
