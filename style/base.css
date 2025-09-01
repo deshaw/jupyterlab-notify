@@ -28,8 +28,6 @@
 .jp-notify-time-input-label {
   display: block;
   margin-bottom: 8px;
-  font-weight: 500;
-  font-size: var(--jp-ui-font-size1);
 }
 
 .jp-notify-time-input-container {
@@ -40,37 +38,18 @@
 
 .jp-notify-time-input-field {
   flex: 1;
-  padding: 6px 12px;
-  font-family: var(--jp-ui-font-family);
-  transition: border-color 0.2s;
-}
-
-.jp-notify-time-input-field:focus {
-  border-color: var(--jp-brand-color1);
-  box-shadow: 0 0 0 1px var(--jp-brand-color1);
-}
-
-.jp-notify-time-input-field:invalid {
-  border-color: var(--jp-error-color1);
+  padding: 4px 6px;
 }
 
 .jp-notify-time-unit-select {
   font-family: var(--jp-ui-font-family);
   cursor: pointer;
   min-width: 100px;
-}
-
-.jp-notify-time-unit-select:focus {
-  border-color: var(--jp-brand-color1);
-  box-shadow: 0 0 0 1px var(--jp-brand-color1);
+  padding: 3px;
 }
 
 .jp-notify-time-input-error {
   color: var(--jp-error-color1);
   font-size: var(--jp-ui-font-size0);
   margin-top: 4px;
-}
-
-.jp-select-wrapper:has(> .jp-notify-time-unit-select.jp-mod-styled) {
-  margin-bottom: 0;
 }
