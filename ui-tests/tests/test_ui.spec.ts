@@ -347,5 +347,5 @@ test('Displays warning when email is enabled but not configured', async ({
     timeout: 2000,
   });
   const text = await warning.textContent();
-  expect(text).toContain('SMTP Server Not Running');
+  expect(text).toContain('Email Not Configured');
 });
