@@ -46,7 +46,7 @@ async function selectNotificationMode(
   value: string | null = null,
   unit: string | null = null,
 ) {
-  await page.notebook.selectCells(cellIdx);
+  await page.notebook.enterCellEditingMode(cellIdx);
   const cell = await page.notebook.getCellLocator(cellIdx);
   const cellToolbarButton = cell!.locator(
     '[data-jp-item-name="cellNotifyMenu"]',
@@ -114,7 +114,7 @@ test('Toggle notification mode updates icon and metadata', async ({ page }) => {
   await page.sidebar.close('left');
 
   // Select the first cell
-  await page.notebook.selectCells(0);
+  await page.notebook.enterCellEditingMode(0);
 
   // Find the notify toolbar button
   const firstCell = await page.notebook.getCellLocator(0);
