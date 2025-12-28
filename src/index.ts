@@ -480,7 +480,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     NotebookActions.executionScheduled.connect(async (_, args) => {
-      const { cell } = args;
+      const { notebook, cell } = args;
       const cellMetadata = cell.model.getMetadata(
         NOTIFY_METADATA_KEY,
       ) as ICellMetadata;
@@ -533,10 +533,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
         );
       }
       if (mode === 'default') {
-        // Prefer cellMetadata.threshold if present, else use notifySettings.defaultThreshold
-        const thresholdInSeconds = cellMetadata.threshold
-          ? decodeThresholdToSeconds(cellMetadata.threshold)
-          : null;
+        // Get the threshold value: prefer cell, then notebook, then settings
+        const thresholdValue = cellMetadata.threshold
+          ?? notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY]
+          ?? notifySettings.defaultThreshold;
+        const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
 
         if (!Number.isFinite(thresholdInSeconds)) {
           JupyterNotification.emit(
@@ -551,9 +552,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       if (mode === 'custom-timeout') {
-        const thresholdInSeconds = cellMetadata.threshold
-          ? decodeThresholdToSeconds(cellMetadata.threshold)
-          : null;
+
+        const thresholdValue = cellMetadata.threshold
+          ?? notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
+          ?? notifySettings.customTimeout;
+        const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
 
         if (!Number.isFinite(thresholdInSeconds)) {
           JupyterNotification.emit(
