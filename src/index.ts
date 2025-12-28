@@ -362,16 +362,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
       // Explicitly run addCellMetadata on the first cell as we miss it while waiting above
       if (notebook.widgets.length > 0 && nbModel) {
         const firstCell = notebook.widgets[0].model;
-        if (firstCell) {
+        if (firstCell && firstCell.type === 'code') {
           addCellMetadata(firstCell, nbModel);
         }
       }
       // Track new cells
       nbModel?.cells.changed.connect((_, change) => {
         if (change.type === 'add') {
-          change.newValues.forEach(cell =>
-            addCellMetadata(cell, notebook.model!),
-          );
+          change.newValues.forEach(cell => {
+            if (cell.type === 'code') {
+              if (notebook.model) {
+                addCellMetadata(cell, notebook.model);
+              }
+            }
+          });
         }
       });
     });
