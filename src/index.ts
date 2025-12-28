@@ -534,9 +534,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
       if (mode === 'default') {
         // Get the threshold value: prefer cell, then notebook, then settings
-        const thresholdValue = cellMetadata.threshold
-          ?? notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY]
-          ?? notifySettings.defaultThreshold;
+        const thresholdValue =
+          cellMetadata.threshold ??
+          notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
+            NOTEBOOK_DEFAULT_THRESHOLD_KEY
+          ] ??
+          notifySettings.defaultThreshold;
         const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
 
         if (!Number.isFinite(thresholdInSeconds)) {
@@ -552,10 +555,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       if (mode === 'custom-timeout') {
-
-        const thresholdValue = cellMetadata.threshold
-          ?? notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
-          ?? notifySettings.customTimeout;
+        const thresholdValue =
+          cellMetadata.threshold ??
+          notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
+            NOTEBOOK_CUSTOM_TIMEOUT_KEY
+          ] ??
+          notifySettings.customTimeout;
         const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
 
         if (!Number.isFinite(thresholdInSeconds)) {
