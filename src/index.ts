@@ -29,7 +29,7 @@ import {
   bellClockIcon,
 } from './icons';
 import { requestAPI } from './handler';
-import { Cell, ICellModel } from '@jupyterlab/cells';
+import { Cell, ICellModel, ICodeCellModel } from '@jupyterlab/cells';
 import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 import { MenuSvg } from '@jupyterlab/ui-components';
 import { BatchNotifier } from './batch_notify';
@@ -405,6 +405,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       notebookId: string,
       threshold = false,
     ): Promise<void> => {
+      if (cell.type !== 'code') {
+        return;
+      }
       const cellId = cell.id;
       const notification = cellNotificationMap.get(cellId);
       if (!notification || notification.notificationIssued) {
@@ -413,6 +416,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
       const { payload } = notification;
       if (payload.mode === 'on-error' && success && !threshold) {
+        return;
+      }
+      // Return for custom-timeout if this isn't triggered by reaching threshold or if cell already finished execution
+      if (
+        payload.mode === 'custom-timeout' &&
+        (!threshold || (cell as ICodeCellModel).executionState !== 'running')
+      ) {
         return;
       }
 

@@ -321,6 +321,35 @@ test('Notification triggers only on timeout with "custom-timeout" mode', async (
   expect(notifications[0].title).toContain('Cell execution timeout reached');
 });
 
+test('Notification does not trigger on execution completion with "custom-timeout" mode', async ({
+  page,
+}) => {
+  await setupNotificationMock(page);
+
+  await createNewNotebook(page, 'test.ipynb');
+  await page.sidebar.close('left');
+
+  // Toggle to 'custom-timeout' with custom timout value
+  await selectNotificationMode(
+    page,
+    0,
+    'Custom Timeout',
+    'Custom',
+    '1',
+    'seconds',
+  );
+
+  // Execute a long-running cell (1.5 seconds)
+  await page.notebook.enterCellEditingMode(0);
+  await page.keyboard.type('"test"');
+  await page.notebook.runCell(0);
+  await page.waitForTimeout(1500); // Wait for notification
+
+  // Verify timeout notification
+  const notifications = await page.evaluate(() => window.mockNotifications);
+  expect(notifications.length).toBe(0);
+});
+
 test('Displays warning when email is enabled but not configured', async ({
   page,
 }) => {
