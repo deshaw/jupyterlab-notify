@@ -387,7 +387,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
         const kernel = session.kernel;
-        if (!kernel || (kernel.status !== 'autorestarting' && kernel.status !== 'dead')) {
+        if (
+          !kernel ||
+          (kernel.status !== 'autorestarting' && kernel.status !== 'dead')
+        ) {
           return;
         }
 
