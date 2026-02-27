@@ -306,7 +306,7 @@ test('Notification triggers on kernel death on "on-error" mode', async ({
   await page.keyboard.type(
     'import os, signal;os.kill(os.getpid(), signal.SIGKILL)',
   );
-  await page.notebook.runCell(0);
+  void page.notebook.runCell(0);
   await page
     .locator('.jp-Dialog-header:has-text("Kernel Restarting")')
     .waitFor({ state: 'visible', timeout: 5000 });
