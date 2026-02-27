@@ -291,6 +291,30 @@ test('Notification triggers only on error with "on-error" mode', async ({
   expect(errorNotifications[0].title).toContain('Cell execution failed');
 });
 
+test('Notification triggers on kernel death on "on-error" mode', async ({
+  page,
+}) => {
+  await setupNotificationMock(page);
+  await createNewNotebook(page, 'test.ipynb');
+  await page.sidebar.close('left');
+  await selectNotificationMode(page, 0, 'On error');
+
+  // Execute a cell that kills kernel
+  await page.notebook.enterCellEditingMode(0);
+
+  await page.keyboard.type('raise Exception("Error")');
+  await page.keyboard.type('import os, signal;os.kill(os.getpid(), signal.SIGKILL)');
+  await page.notebook.runCell(0);
+  await page.locator('.jp-Dialog-header:has-text("Kernel Restarting")').waitFor({ state: 'visible', timeout: 5000 });
+
+  // Verify error notification
+  const errorNotifications = await page.evaluate(
+    () => window.mockNotifications,
+  );
+  expect(errorNotifications.length).toBe(1);
+  expect(errorNotifications[0].title).toContain('Cell execution failed');
+});
+
 test('Notification triggers only on timeout with "custom-timeout" mode', async ({
   page,
 }) => {

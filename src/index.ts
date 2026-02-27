@@ -98,6 +98,7 @@ interface ICellNotification {
   payload: any;
   timeoutId: number | null;
   notificationIssued: boolean;
+  notebookId: string;
 }
 
 export interface INotificationData {
@@ -378,6 +379,57 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
         }
       });
+
+      // Monitor kernel status changes to detect kernel death and autorestarts
+      const handleKernelDeath = async () => {
+        const session = notebookPanel.sessionContext.session;
+        if (!session) {
+          return;
+        }
+        const kernel = session.kernel;
+        if (!kernel || (kernel.status !== 'autorestarting' && kernel.status !== 'dead')) {
+          return;
+        }
+
+        const notebookId = notebook.id;
+        for (const [cellId, notification] of cellNotificationMap.entries()) {
+          if (
+            notification.notebookId === notebookId &&
+            notification.payload.mode === 'on-error' &&
+            !notification.notificationIssued
+          ) {
+            const cellWidget = notebook.widgets.find(
+              w => w.model.id === cellId,
+            );
+            if (cellWidget) {
+              await handleNotification(cellWidget.model, false, notebookId);
+            }
+          }
+        }
+      };
+
+      notebookPanel.sessionContext.statusChanged.connect(handleKernelDeath);
+
+      const onKernelStatusChanged = () => {
+        handleKernelDeath().catch(err => {
+          console.error('Error handling kernel death:', err);
+        });
+      };
+
+      notebookPanel.sessionContext.kernelChanged.connect(() => {
+        const kernel = notebookPanel.sessionContext.session?.kernel;
+        if (kernel) {
+          // Connect to kernel status changes
+          kernel.statusChanged.disconnect(onKernelStatusChanged);
+          kernel.statusChanged.connect(onKernelStatusChanged);
+        }
+      });
+
+      // Connect to initial kernel if it exists
+      const kernel = notebookPanel.sessionContext.session?.kernel;
+      if (kernel) {
+        kernel.statusChanged.connect(onKernelStatusChanged);
+      }
     });
 
     // Server configuration
@@ -606,6 +658,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         payload,
         timeoutId: null,
         notificationIssued: false,
+        notebookId: args.notebook.id,
       };
 
       if (config.nbmodel_installed) {
