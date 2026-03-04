@@ -710,6 +710,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
             notifySettings.customTimeout
           : notifySettings.defaultThreshold;
 
+      const executionCount = (cell.model as ICodeCellModel).executionCount;
+      const notebookName = resolveNotebookName(args.notebook.id);
+
       const payload = {
         cell_id: cell.model.id,
         mode,
@@ -718,6 +721,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
         successMessage: notifySettings.successMessage,
         failureMessage: notifySettings.failureMessage,
         threshold: decodeThresholdToSeconds(thresholdValue),
+        notebook_name: notebookName,
+        execution_count:
+          typeof executionCount === 'number' ? executionCount : null,
       };
 
       const notification: ICellNotification = {

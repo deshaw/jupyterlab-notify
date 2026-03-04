@@ -21,6 +21,8 @@ class NotificationParams:
     success: Optional[bool] = False
     timer: Optional[Timer] = None
     start_time: Optional[str] = None
+    notebook_name: Optional[str] = None
+    execution_count: Optional[int] = None
 
 
 def notification_params_from_dict(data: Dict[str, Any]) -> NotificationParams:

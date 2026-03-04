@@ -185,15 +185,25 @@ class NotifyExtension(ExtensionApp):
 
         # Skip notification if execution time is below the threshold in default mode
         if params.mode == "default" and params.start_time and end_time:
-            start_time = datetime.fromisoformat(params.start_time)
-            end_time = datetime.fromisoformat(end_time)
+            start_time_dt = datetime.fromisoformat(params.start_time)
+            end_time_dt = datetime.fromisoformat(end_time)
 
-            if (end_time - start_time) < timedelta(seconds=params.threshold):
+            if (end_time_dt - start_time_dt) < timedelta(seconds=params.threshold):
                 return
 
-        formatted_message = (
-            f"Execution Status: {status}\nCell id: {params.cell_id}\nDetails: {message}"
-        )
+        # Build formatted message with status, cell info, and details
+        cell_info = f"Cell: {params.execution_count}" if params.execution_count is not None else f"Cell id: {params.cell_id}"
+
+        message_parts = []
+        if params.notebook_name:
+            message_parts.append(params.notebook_name)
+        message_parts.extend([
+            f"Execution Status: {status}",
+            cell_info,
+            f"Details: {message}"
+        ])
+
+        formatted_message = "\n".join(message_parts)
         self.log.debug(f"Formatted notification message: {formatted_message}")
 
         if params.slackEnabled:
