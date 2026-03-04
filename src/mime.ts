@@ -65,9 +65,14 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
     if (mimeData.type === 'NOTIFY') {
       // Notify only if there's sufficient permissions and this has not been processed previously
       if (Notification.permission === 'granted' && !mimeData[PROCESSED_KEY]) {
+        const body =
+          typeof payload.body === 'string' ? (payload.body as string) : '';
+        const options = body
+          ? { ...NOTIFICATION_OPTIONS, body }
+          : NOTIFICATION_OPTIONS;
         const notification = new Notification(
           payload.title as string,
-          NOTIFICATION_OPTIONS,
+          options,
         );
         // Set up click handler
         notification.onclick = event => {

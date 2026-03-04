@@ -99,6 +99,7 @@ interface ICellNotification {
   timeoutId: number | null;
   notificationIssued: boolean;
   notebookId: string;
+  notebookName: string;
 }
 
 export interface INotificationData {
@@ -108,6 +109,8 @@ export interface INotificationData {
     body: string;
     cellId: string;
     notebookId: string;
+    notebookName: string;
+    executionCount?: number;
   };
   isProcessed: boolean;
   id: string;
@@ -143,21 +146,40 @@ const MODES: Record<ModeId, IMode & { info: string }> = {
 
 // Regular expression for validating timeout input
 const TIMEOUT_PATTERN = /^(\d+(\.\d+)?)([smh])$/;
+const NOTEBOOK_FILE_EXTENSION = '.ipynb';
+
+const stripNotebookExtension = (pathOrName: string): string => {
+  const notebookName = pathOrName.split('/').pop() ?? pathOrName;
+  return notebookName.endsWith(NOTEBOOK_FILE_EXTENSION)
+    ? notebookName.slice(0, -NOTEBOOK_FILE_EXTENSION.length)
+    : notebookName;
+};
+
+const buildNotificationTitle = (
+  notebookName: string,
+  message: string,
+): string => {
+  return `[${notebookName}] ${message}`;
+};
 
 /**
- * Generates notification data with a custom message
+ * Generates notification data for desktop alerts.
  */
 const generateNotificationData = (
   message: string,
   cell_id: string,
   notebookId: string,
+  notebookName: string,
+  executionCount: number | null,
 ): INotificationData => ({
   type: 'NOTIFY',
   payload: {
-    title: message,
-    body: `Cell id: ${cell_id}`,
+    title: buildNotificationTitle(notebookName, message),
+    body: typeof executionCount === 'number' ? `Cell: ${executionCount}` : '',
     cellId: cell_id,
     notebookId: notebookId,
+    notebookName,
+    ...(typeof executionCount === 'number' ? { executionCount } : {}),
   },
   isProcessed: false,
   id: `notify-${Math.random().toString(36).substring(2)}`,
@@ -308,6 +330,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
         console.error('Failed to load settings for jupyterlab-notify:', reason);
       }
     }
+
+    const resolveNotebookName = (notebookId: string): string => {
+      let notebookPathOrName: string | null = null;
+      tracker.forEach(panel => {
+        if (panel.content.id === notebookId) {
+          notebookPathOrName = panel.context.path || panel.title.label;
+        }
+      });
+
+      if (!notebookPathOrName) {
+        return 'Unknown Notebook';
+      }
+
+      return stripNotebookExtension(notebookPathOrName);
+    };
 
     const addCellMetadata = (
       cell: ICellModel,
@@ -500,7 +537,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
       }
 
-      // Determine appropriate message based on execution state
+      // Determine notification type based on execution state
       const state: NotifyType = threshold
         ? 'timeout'
         : success
@@ -512,11 +549,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
           : state === 'completed'
           ? notifySettings.successMessage
           : notifySettings.failureMessage;
+      const executionCount = (cell as ICodeCellModel).executionCount;
 
       const notificationData = generateNotificationData(
         message,
         cellId,
         notebookId,
+        notification.notebookName || resolveNotebookName(notebookId),
+        typeof executionCount === 'number' ? executionCount : null,
       );
 
       if (!config.nbmodel_installed) {
@@ -662,6 +702,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         timeoutId: null,
         notificationIssued: false,
         notebookId: args.notebook.id,
+        notebookName: resolveNotebookName(args.notebook.id),
       };
 
       if (config.nbmodel_installed) {

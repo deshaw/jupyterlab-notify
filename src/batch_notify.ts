@@ -58,7 +58,7 @@ export class BatchNotifier {
     if (state.buffer.length === 1) {
       await this.showSingle(state.buffer[0]);
     } else {
-      await this.showBatch(type, state.buffer);
+      await this.showBatch(state.buffer);
     }
 
     state.buffer = [];
@@ -76,15 +76,16 @@ export class BatchNotifier {
     }
   }
 
-  private async showBatch(type: NotifyType, batch: INotificationData[]) {
-    const count = batch.length;
-
-    const cellIds = batch
-      .map(n => {
-        const match = n.payload.body.match(/Cell id:\s*(.*)/);
-        return match ? match[1] : '';
-      })
-      .filter(id => id);
+  private async showBatch(batch: INotificationData[]) {
+    const firstTitle = batch[0].payload.title;
+    const body = batch
+      .map(notification => notification.payload.executionCount)
+      .filter(
+     (executionCount): executionCount is number =>
+        typeof executionCount === 'number',
+      )
+      .map(executionCount => executionCount.toString())
+      .join(', ');
 
     // Contains notebookId and cellId of first notification. Notification are batched per notebook
     // So, clicking on this batched notification will take user to first cell that raised notification
@@ -92,8 +93,8 @@ export class BatchNotifier {
       ...batch[0],
       payload: {
         ...batch[0].payload,
-        title: `${count} ${batch[0].payload.title.replace('Cell', 'cells')}`,
-        body: cellIds.map(id => `Cell id: ${id}`).join('\n'),
+        title: firstTitle.replace(/Cell /, `${batch.length} cells `),
+        body,
       },
     };
 

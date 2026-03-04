@@ -234,9 +234,10 @@ test('Notification triggers on cell execution with "default" mode', async ({
   });
   expect(successNotifications.length).toBeGreaterThan(0);
 
-  expect(successNotifications[0].title).toContain(
-    'Cell execution completed successfully',
+  expect(successNotifications[0].title).toBe(
+    '[test] Cell execution completed successfully',
   );
+  expect(successNotifications[0].body).toMatch(/Cell: \d+/);
 
   // Execute a failing cell
   await selectNotificationMode(page, 1, 'Default');
@@ -250,7 +251,7 @@ test('Notification triggers on cell execution with "default" mode', async ({
     return window.mockNotifications;
   });
   expect(allNotifications.length).toBeGreaterThan(1);
-  expect(allNotifications[1].title).toContain('Cell execution failed');
+  expect(allNotifications[1].title).toBe('[test] Cell execution failed');
 });
 
 test('Notification triggers only on error with "on-error" mode', async ({
@@ -288,7 +289,7 @@ test('Notification triggers only on error with "on-error" mode', async ({
     () => window.mockNotifications,
   );
   expect(errorNotifications.length).toBe(1);
-  expect(errorNotifications[0].title).toContain('Cell execution failed');
+  expect(errorNotifications[0].title).toBe('[test] Cell execution failed');
 });
 
 test('Notification triggers on kernel death on "on-error" mode', async ({
@@ -315,7 +316,7 @@ test('Notification triggers on kernel death on "on-error" mode', async ({
     () => window.mockNotifications,
   );
   expect(errorNotifications.length).toBe(1);
-  expect(errorNotifications[0].title).toContain('Cell execution failed');
+  expect(errorNotifications[0].title).toBe('[test] Cell execution failed');
 
   // Don't wait for the promise since kernel was killed
   runCellPromise.catch(() => {});
@@ -348,7 +349,9 @@ test('Notification triggers only on timeout with "custom-timeout" mode', async (
   // Verify timeout notification
   const notifications = await page.evaluate(() => window.mockNotifications);
   expect(notifications.length).toBeGreaterThan(0);
-  expect(notifications[0].title).toContain('Cell execution timeout reached');
+  expect(notifications[0].title).toBe(
+    '[test] Cell execution timeout reached',
+  );
 });
 
 test('Notification does not trigger on execution completion with "custom-timeout" mode', async ({
