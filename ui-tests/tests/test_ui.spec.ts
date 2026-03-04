@@ -349,9 +349,7 @@ test('Notification triggers only on timeout with "custom-timeout" mode', async (
   // Verify timeout notification
   const notifications = await page.evaluate(() => window.mockNotifications);
   expect(notifications.length).toBeGreaterThan(0);
-  expect(notifications[0].title).toBe(
-    '[test] Cell execution timeout reached',
-  );
+  expect(notifications[0].title).toBe('[test] Cell execution timeout reached');
 });
 
 test('Notification does not trigger on execution completion with "custom-timeout" mode', async ({

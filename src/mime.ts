@@ -70,10 +70,7 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
         const options = body
           ? { ...NOTIFICATION_OPTIONS, body }
           : NOTIFICATION_OPTIONS;
-        const notification = new Notification(
-          payload.title as string,
-          options,
-        );
+        const notification = new Notification(payload.title as string, options);
         // Set up click handler
         notification.onclick = event => {
           event.preventDefault();

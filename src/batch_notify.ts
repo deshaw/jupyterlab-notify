@@ -81,8 +81,8 @@ export class BatchNotifier {
     const body = batch
       .map(notification => notification.payload.executionCount)
       .filter(
-     (executionCount): executionCount is number =>
-        typeof executionCount === 'number',
+        (executionCount): executionCount is number =>
+          typeof executionCount === 'number',
       )
       .map(executionCount => executionCount.toString())
       .join(', ');
