@@ -393,8 +393,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (nbModel && !nbModel.getMetadata(NOTIFY_METADATA_KEY)) {
         nbModel.setMetadata(NOTIFY_METADATA_KEY, {
           mode: notifySettings.defaultMode,
-          [NOTEBOOK_CUSTOM_TIMEOUT_KEY]: notifySettings.customTimeout,
-          [NOTEBOOK_DEFAULT_THRESHOLD_KEY]: notifySettings.defaultThreshold,
+          [NOTEBOOK_CUSTOM_TIMEOUT_KEY]:
+            typeof notifySettings.customTimeout === 'number'
+              ? `${notifySettings.customTimeout}s`
+              : notifySettings.customTimeout,
+          [NOTEBOOK_DEFAULT_THRESHOLD_KEY]:
+            typeof notifySettings.defaultThreshold === 'number'
+              ? `${notifySettings.defaultThreshold}s`
+              : notifySettings.defaultThreshold,
         });
       }
       // Explicitly run addCellMetadata on the first cell as we miss it while waiting above
@@ -775,8 +781,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       icon: args =>
         args.noIcon ? undefined : MODES[args.modeId as ModeId].icon,
       execute: args => {
-        const modeId = args.modeId;
-        let threshold = args.threshold; // Stored as string, e.g., "120s"
+        const modeId = args.modeId as ModeId;
+        let threshold = args.threshold as string | undefined; // Stored as string, e.g., "120s"
         const current = tracker.currentWidget;
         if (!current) {
           console.warn('No notebook selected');
@@ -786,24 +792,40 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (!cell) {
           return;
         }
-        let metadata;
+
+        // Get existing metadata to preserve threshold
+        const existingMetadata = cell.model.getMetadata(NOTIFY_METADATA_KEY) as
+          | ICellMetadata
+          | undefined;
+
+        const metadata: ICellMetadata = { mode: modeId };
+
+        // Preserve existing threshold if present
+        if (existingMetadata?.threshold) {
+          metadata.threshold = existingMetadata.threshold;
+        }
+
+        // Override threshold if explicitly provided in args
         if (modeId === 'custom-timeout' || modeId === 'default') {
           const nbModel = current?.model;
-          if (modeId === 'default') {
-            threshold =
-              nbModel?.getMetadata(NOTIFY_METADATA_KEY)?.[
-                NOTEBOOK_DEFAULT_THRESHOLD_KEY
-              ];
-          } else if (!threshold) {
-            threshold =
-              nbModel?.getMetadata(NOTIFY_METADATA_KEY)?.[
-                NOTEBOOK_CUSTOM_TIMEOUT_KEY
-              ];
+          if (!threshold) {
+            if (modeId === 'default') {
+              threshold =
+                nbModel?.getMetadata(NOTIFY_METADATA_KEY)?.[
+                  NOTEBOOK_DEFAULT_THRESHOLD_KEY
+                ];
+            } else {
+              threshold =
+                nbModel?.getMetadata(NOTIFY_METADATA_KEY)?.[
+                  NOTEBOOK_CUSTOM_TIMEOUT_KEY
+                ];
+            }
           }
-          metadata = { mode: modeId, threshold };
-        } else {
-          metadata = { mode: modeId };
+          if (threshold) {
+            metadata.threshold = threshold;
+          }
         }
+
         cell.model.setMetadata(NOTIFY_METADATA_KEY, metadata);
       },
       isEnabled: () =>
@@ -921,7 +943,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     app.commands.addCommand(CommandIDs.setCustomTimeout, {
-      caption: 'DP_HERO',
+      caption: 'Set a custom timeout for cell notifications',
       label: trans.__('Custom'),
       execute: async () => {
         const current = tracker.currentWidget;
@@ -1017,7 +1039,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       type: 'command',
       command: CommandIDs.openNotificationSettings,
     });
-    // Add "DP hero" title attribute to all li.lm-Menu-item under cellNotifyMenu
 
     setTimeout(() => {
       cellNotifyMenu.node
@@ -1044,69 +1065,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     nbNotifyMenu.addClass('jp-notify-menu');
     nbNotifyMenu.title.label = trans.__('Notebook Notification');
 
-    Object.entries(MODES).forEach(([modeId, mode]) => {
-      if (modeId === 'custom-timeout') {
-        nbNotifyMenu.addItem({
-          command: CommandIDs.setNotebookNotificationMode,
-          args: {
-            modeId,
-          },
-        });
-      } else if (modeId === 'default') {
-        nbNotifyMenu.addItem({
-          command: CommandIDs.setNotebookNotificationMode,
-          args: {
-            modeId,
-          },
-        });
-      } else {
-        nbNotifyMenu.addItem({
-          command: CommandIDs.setNotebookNotificationMode,
-          args: { modeId },
-        });
-      }
-    });
-
-    // Add Settings Shortcut
-    nbNotifyMenu.addItem({
-      type: 'separator',
-    });
-    nbNotifyMenu.addItem({
-      type: 'command',
-      command: CommandIDs.setNotebookDefaultThreshold,
-    });
-    nbNotifyMenu.addItem({
-      type: 'command',
-      command: CommandIDs.setNotebookCustomTimeout,
-    });
-
-    setTimeout(() => {
-      nbNotifyMenu.node
-        .querySelectorAll('ul.lm-Menu-content > li.lm-Menu-item')
-        .forEach(li => {
-          const labelDiv = li.querySelector('.lm-Menu-itemLabel');
-          let modeId = '';
-          if (labelDiv && labelDiv.textContent) {
-            modeId = labelDiv.textContent
-              .trim()
-              .toLowerCase()
-              .replace(/\s+/g, '-');
-          }
-          if (Object.prototype.hasOwnProperty.call(MODES, modeId)) {
-            li.setAttribute('title', MODES[modeId as ModeId].info ?? '');
-          } else if (modeId === 'set-default-threshold') {
-            li.setAttribute(
-              'title',
-              'Set value of default notification threshold for this notebook',
-            );
-          } else if (modeId === 'set-custom-timeout') {
-            li.setAttribute(
-              'title',
-              'Set value of custom notification timeout for this notebook',
-            );
-          }
-        });
-    }, 0);
+    // Menu items will be built dynamically when the menu is opened
 
     // Helper function to update the cell toolbar button on metadata change
     function updateCellToolbarButton(button: ToolbarButton, cell: ICellModel) {
@@ -1118,11 +1077,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
       // Replace the tooltip
       let tooltip = MODES[modeId].label;
-      if (
-        (modeId === 'default' || modeId === 'custom-timeout') &&
-        metadata?.threshold
-      ) {
-        tooltip += ` (${metadata.threshold})`;
+      let threshold = metadata?.threshold;
+      if (!threshold) {
+        const nbMetadata = tracker.currentWidget?.model?.getMetadata(
+          NOTIFY_METADATA_KEY,
+        ) as Record<string, any> | undefined;
+
+        threshold =
+          modeId === 'default'
+            ? nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY]
+            : modeId === 'custom-timeout'
+            ? nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
+            : undefined;
+      }
+
+      if ((modeId === 'default' || modeId === 'custom-timeout') && threshold) {
+        tooltip += ` (${
+          typeof threshold === 'number' ? `${threshold}s` : threshold
+        })`;
       }
       tooltip += '\nClick to change';
       const jpButton = button.node.querySelector('jp-button');
@@ -1203,6 +1175,95 @@ const plugin: JupyterFrontEndPlugin<void> = {
               if (nbNotifyMenu.isVisible) {
                 nbNotifyMenu.close();
               } else {
+                // Update menu items with current notebook's threshold values
+                const nbMetadata = notebook.getMetadata(
+                  NOTIFY_METADATA_KEY,
+                ) as any;
+                const defaultThreshold =
+                  nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
+                const customThreshold =
+                  nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY];
+
+                // Clear and rebuild menu with current values
+                nbNotifyMenu.clearItems();
+                Object.entries(MODES).forEach(([modeId, mode]) => {
+                  if (modeId === 'custom-timeout') {
+                    const label = customThreshold
+                      ? `${mode.label} (${customThreshold})`
+                      : mode.label;
+                    nbNotifyMenu.addItem({
+                      command: CommandIDs.setNotebookNotificationMode,
+                      args: {
+                        modeId,
+                        label,
+                      },
+                    });
+                  } else if (modeId === 'default') {
+                    const label = defaultThreshold
+                      ? `${mode.label} (${defaultThreshold})`
+                      : mode.label;
+                    nbNotifyMenu.addItem({
+                      command: CommandIDs.setNotebookNotificationMode,
+                      args: {
+                        modeId,
+                        label,
+                      },
+                    });
+                  } else {
+                    nbNotifyMenu.addItem({
+                      command: CommandIDs.setNotebookNotificationMode,
+                      args: { modeId },
+                    });
+                  }
+                });
+
+                // Add Settings Shortcut
+                nbNotifyMenu.addItem({
+                  type: 'separator',
+                });
+                nbNotifyMenu.addItem({
+                  type: 'command',
+                  command: CommandIDs.setNotebookDefaultThreshold,
+                });
+                nbNotifyMenu.addItem({
+                  type: 'command',
+                  command: CommandIDs.setNotebookCustomTimeout,
+                });
+
+                // Update tooltips
+                setTimeout(() => {
+                  nbNotifyMenu.node
+                    .querySelectorAll('ul.lm-Menu-content > li.lm-Menu-item')
+                    .forEach(li => {
+                      const labelDiv = li.querySelector('.lm-Menu-itemLabel');
+                      let mode = '';
+                      if (labelDiv && labelDiv.textContent) {
+                        mode = labelDiv.textContent
+                          .trim()
+                          .toLowerCase()
+                          .replace(/\s+/g, '-')
+                          .replace(/\(\d+[smh]\)$/, '')
+                          .trim();
+                      }
+                      if (Object.prototype.hasOwnProperty.call(MODES, mode)) {
+                        li.setAttribute(
+                          'title',
+                          MODES[mode as ModeId].info ?? '',
+                        );
+                      } else if (mode === 'set-default-threshold') {
+                        li.setAttribute(
+                          'title',
+                          'Set value of default notification threshold for this notebook',
+                        );
+                      } else if (mode === 'set-custom-timeout') {
+                        li.setAttribute(
+                          'title',
+                          'Set value of custom notification timeout for this notebook',
+                        );
+                      }
+                    });
+                }, 0);
+
                 const rect = button.node.getBoundingClientRect();
                 nbNotifyMenu.open(rect.right, rect.bottom, {
                   horizontalAlignment: 'right',
@@ -1229,11 +1290,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
           | undefined;
         const modeId = metadata?.mode ?? notifySettings.defaultMode; // Fallback to default if metadata is unset
         let tooltip = MODES[modeId].label;
+        let threshold = metadata?.threshold;
+        if (!threshold) {
+          const nbMetadata = tracker.currentWidget?.model?.getMetadata(
+            NOTIFY_METADATA_KEY,
+          ) as Record<string, any> | undefined;
+
+          threshold =
+            modeId === 'default'
+              ? nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY]
+              : modeId === 'custom-timeout'
+              ? nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
+              : undefined;
+        }
         if (
           (modeId === 'default' || modeId === 'custom-timeout') &&
-          metadata?.threshold
+          threshold
         ) {
-          tooltip += ` (${metadata.threshold})`;
+          tooltip += ` (${threshold})`;
         }
         tooltip += '\nClick to change';
         // Create the button with the correct initial icon
