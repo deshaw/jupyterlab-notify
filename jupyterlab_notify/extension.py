@@ -94,6 +94,15 @@ class NotifyExtension(ExtensionApp):
 
         self.log.debug(f"Received execution end event: {data}")
         params = self.cell_ids[cell_id]
+        
+        # Skip if notification was already sent (e.g., by timeout)
+        if params.notification_sent:
+            self.log.debug(f"Notification already sent for cell_id {cell_id}, skipping")
+            if params.timer:
+                params.timer.cancel()
+            del self.cell_ids[cell_id]
+            return
+        
         if params.timer:
             params.timer.cancel()
         params.success = data.get("success")
@@ -210,3 +219,6 @@ class NotifyExtension(ExtensionApp):
             self.send_slack_notification(formatted_message)
         if params.emailEnabled:
             self.send_email_notification(formatted_message)
+        
+        # Mark notification as sent to prevent duplicates
+        params.notification_sent = True
