@@ -53,3 +53,17 @@
   font-size: var(--jp-ui-font-size0);
   margin-top: 4px;
 }
+
+.jp-notify-checkbox-container {
+  display: flex;
+  margin-top: 12px;
+}
+
+.jp-notify-checkbox-label {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.jp-notify-checkbox-input {
+  margin: 0;
+}

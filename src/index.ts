@@ -868,24 +868,36 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     // Helper to prompt for a timeout/threshold value and validate it
-    async function promptForTimeout(options: {
-      title: string;
-      label: string;
-      placeholder: string;
-      errorMessage: string;
-      defaultValue?: number;
-      defaultUnit?: TimeUnit;
-    }): Promise<string | null> {
+    async function promptForTimeout(
+      options: {
+        title: string;
+        label: string;
+        placeholder: string;
+        errorMessage: string;
+        defaultValue?: number;
+        defaultUnit?: TimeUnit;
+      },
+      showCheckbox = false,
+    ): Promise<{ value: string | null; applyToAll: boolean }> {
       const timeResult = await TimeInputDialog.getText({
         title: options.title,
         label: options.label,
         placeholder: options.placeholder,
         defaultValue: options.defaultValue,
         defaultUnit: options.defaultUnit,
+        ...(showCheckbox && {
+          checkbox: {
+            label: trans.__('Apply to all cells in this notebook'),
+          },
+        }),
       });
+
+      if (!timeResult) {
+        return { value: null, applyToAll: false };
+      }
+
       const rawInput =
-        String(timeResult?.value) +
-        (timeResult?.unit ? timeResult.unit[0] : 's');
+        String(timeResult.value) + (timeResult.unit ? timeResult.unit[0] : 's');
       const lastChar = rawInput.slice(-1);
       const input =
         rawInput === ''
@@ -894,10 +906,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
           ? rawInput
           : rawInput + 's';
 
-      if (!rawInput || !TIMEOUT_PATTERN.test(input)) {
-        return null;
+      if (!input || !TIMEOUT_PATTERN.test(input)) {
+        return { value: null, applyToAll: false };
       }
-      return input;
+
+      const applyToAll = (showCheckbox ? timeResult.isChecked : false) ?? false;
+      return { value: input, applyToAll };
     }
 
     // Command to set custom timeout in notebook metadata
@@ -920,7 +934,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             unit = parsed.unit;
           }
         }
-        const input = await promptForTimeout({
+        const timeoutOptions = {
           title: 'Set Notebook Custom Timeout',
           label: 'Custom timeout value with unit:',
           placeholder: '30',
@@ -928,12 +942,34 @@ const plugin: JupyterFrontEndPlugin<void> = {
             'Please enter a positive number and select a unit (seconds, minutes, or hours).',
           defaultValue: value,
           defaultUnit: unit,
-        });
+        };
+        const { value: input, applyToAll } = await promptForTimeout(
+          timeoutOptions,
+          true,
+        );
         if (input) {
           current.model.setMetadata(NOTIFY_METADATA_KEY, {
             ...prev,
             [NOTEBOOK_CUSTOM_TIMEOUT_KEY]: input,
           });
+
+          // Apply to all cells if requested
+          if (applyToAll && current.content) {
+            current.content.widgets.forEach(cellWidget => {
+              const cellModel = cellWidget.model;
+              const cellMetadata = cellModel.getMetadata(
+                NOTIFY_METADATA_KEY,
+              ) as ICellMetadata | undefined;
+
+              // Only update cells that have a customTimeout value
+              if (cellMetadata?.[CELL_CUSTOM_TIMEOUT_KEY]) {
+                cellModel.setMetadata(NOTIFY_METADATA_KEY, {
+                  ...cellMetadata,
+                  [CELL_CUSTOM_TIMEOUT_KEY]: input,
+                });
+              }
+            });
+          }
         }
       },
     });
@@ -958,7 +994,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             unit = parsed.unit;
           }
         }
-        const input = await promptForTimeout({
+        const thresholdOptions = {
           title: 'Set Notebook Default Threshold',
           label: 'Default Threshold value with unit:',
           placeholder: '30',
@@ -966,13 +1002,35 @@ const plugin: JupyterFrontEndPlugin<void> = {
             'Please enter a positive number and select a unit (seconds, minutes, or hours).',
           defaultValue: value,
           defaultUnit: unit,
-        });
+        };
+        const { value: input, applyToAll } = await promptForTimeout(
+          thresholdOptions,
+          true,
+        );
         if (input) {
           const prev = current.model.getMetadata(NOTIFY_METADATA_KEY) || {};
           current.model.setMetadata(NOTIFY_METADATA_KEY, {
             ...prev,
             [NOTEBOOK_DEFAULT_THRESHOLD_KEY]: input,
           });
+
+          // Apply to all cells if requested
+          if (applyToAll && current.content) {
+            current.content.widgets.forEach(cellWidget => {
+              const cellModel = cellWidget.model;
+              const cellMetadata = cellModel.getMetadata(
+                NOTIFY_METADATA_KEY,
+              ) as ICellMetadata | undefined;
+
+              // Only update cells that have a defaultThreshold value
+              if (cellMetadata?.[CELL_DEFAULT_THRESHOLD_KEY]) {
+                cellModel.setMetadata(NOTIFY_METADATA_KEY, {
+                  ...cellMetadata,
+                  [CELL_DEFAULT_THRESHOLD_KEY]: input,
+                });
+              }
+            });
+          }
         }
       },
     });
@@ -995,7 +1053,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             }
           }
         }
-        const input = await promptForTimeout({
+        const { value: input } = await promptForTimeout({
           title: 'Set Custom Timeout',
           label: 'Custom timeout value with unit:',
           placeholder: '30',

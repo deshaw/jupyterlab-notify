@@ -23,6 +23,10 @@ export interface ITimeInputDialogOptions {
   cancelLabel?: string;
   host?: HTMLElement;
   initialInputValid?: boolean;
+  checkbox?: {
+    label: string;
+    caption?: string;
+  };
 }
 
 /**
@@ -32,6 +36,7 @@ export interface ITimeInputResult {
   value: number;
   unit: TimeUnit;
   totalSeconds: number;
+  isChecked?: boolean;
 }
 
 /**
@@ -43,6 +48,7 @@ interface ITimeInputProps {
   defaultValue?: number;
   defaultUnit?: TimeUnit;
   initialInputValid?: boolean;
+  checkboxLabel?: string;
   onValidationChange?: (isValid: boolean) => void;
   onResultChange?: (result: ITimeInputResult) => void;
 }
@@ -56,6 +62,7 @@ const TimeInput: React.FC<ITimeInputProps> = ({
   defaultValue,
   defaultUnit = TimeUnit.SECONDS,
   initialInputValid = true,
+  checkboxLabel,
   onValidationChange,
   onResultChange,
 }) => {
@@ -69,6 +76,7 @@ const TimeInput: React.FC<ITimeInputProps> = ({
   );
   const [unit, setUnit] = useState<TimeUnit>(defaultUnit);
   const [isValid, setIsValid] = useState<boolean>(initialInputValid);
+  const [isChecked, setIsChecked] = useState<boolean>(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -114,6 +122,7 @@ const TimeInput: React.FC<ITimeInputProps> = ({
         value: numValue,
         unit,
         totalSeconds,
+        isChecked,
       });
     }
   };
@@ -131,6 +140,25 @@ const TimeInput: React.FC<ITimeInputProps> = ({
         value: numValue,
         unit: newUnit,
         totalSeconds,
+        isChecked,
+      });
+    }
+  };
+
+  /**
+   * Handle checkbox state changes
+   */
+  const handleCheckboxChange = (checked: boolean) => {
+    setIsChecked(checked);
+
+    if (isValid && onResultChange) {
+      const numValue = parseFloat(value) || 0;
+      const totalSeconds = calculateTotalSeconds(value, unit);
+      onResultChange({
+        value: numValue,
+        unit,
+        totalSeconds,
+        isChecked: checked,
       });
     }
   };
@@ -190,6 +218,19 @@ const TimeInput: React.FC<ITimeInputProps> = ({
           Please enter a valid positive number
         </div>
       )}
+      {checkboxLabel && (
+        <div className="jp-notify-checkbox-container">
+          <label className="jp-notify-checkbox-label">
+            <input
+              type="checkbox"
+              checked={isChecked}
+              onChange={e => handleCheckboxChange(e.target.checked)}
+              className="jp-notify-checkbox-input"
+            />
+            <span>{checkboxLabel}</span>
+          </label>
+        </div>
+      )}
     </div>
   );
 };
@@ -239,6 +280,7 @@ export class TimeInputWidget extends ReactWidget {
       value: defaultValue,
       unit: defaultUnit,
       totalSeconds,
+      isChecked: false,
     };
   }
 
@@ -269,6 +311,7 @@ export class TimeInputWidget extends ReactWidget {
         initialInputValid={this._options.initialInputValid}
         onValidationChange={this._handleValidationChange}
         onResultChange={this._handleResultChange}
+        checkboxLabel={this._options.checkbox?.label}
       />
     );
   }
