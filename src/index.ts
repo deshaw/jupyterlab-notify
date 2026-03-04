@@ -58,6 +58,8 @@ const TIMEOUT_OPTIONS = [
 const NOTIFY_METADATA_KEY = 'jupyterlab_notify.notify';
 const NOTEBOOK_DEFAULT_THRESHOLD_KEY = 'defaultThreshold';
 const NOTEBOOK_CUSTOM_TIMEOUT_KEY = 'customTimeout';
+const CELL_DEFAULT_THRESHOLD_KEY = 'defaultThreshold';
+const CELL_CUSTOM_TIMEOUT_KEY = 'customTimeout';
 const NB_TOOLBAR_NOTIFICATION_CLASS = 'jp-Toolbar-notification-mode';
 
 interface IExecutionTimingMetadata {
@@ -84,7 +86,8 @@ interface INotifySettings {
 
 interface ICellMetadata {
   mode: ModeId;
-  threshold?: string;
+  defaultThreshold?: string;
+  customTimeout?: string;
 }
 
 interface IInitialResponse {
@@ -364,17 +367,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
         cell.setMetadata(NOTIFY_METADATA_KEY, {
           mode,
-          ...(nbThreshold ? { threshold: nbThreshold } : {}),
+          ...(nbThreshold ? { [CELL_DEFAULT_THRESHOLD_KEY]: nbThreshold } : {}),
         });
       } else if (mode === 'custom-timeout') {
-        // Use threshold from notebook metadata's NOTEBOOK_CUSTOM_TIMEOUT_KEY if present
+        // Use timeout from notebook metadata's NOTEBOOK_CUSTOM_TIMEOUT_KEY if present
         let nbCustomTimeout = nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY];
         if (typeof nbCustomTimeout === 'number') {
           nbCustomTimeout = `${nbCustomTimeout}s`;
         }
         cell.setMetadata(NOTIFY_METADATA_KEY, {
           mode,
-          ...(nbCustomTimeout ? { threshold: nbCustomTimeout } : {}),
+          ...(nbCustomTimeout
+            ? { [CELL_CUSTOM_TIMEOUT_KEY]: nbCustomTimeout }
+            : {}),
         });
       } else {
         cell.setMetadata(NOTIFY_METADATA_KEY, { mode });
@@ -650,7 +655,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (mode === 'default') {
         // Get the threshold value: prefer cell, then notebook, then settings
         const thresholdValue =
-          cellMetadata.threshold ??
+          cellMetadata[CELL_DEFAULT_THRESHOLD_KEY] ??
           notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
             NOTEBOOK_DEFAULT_THRESHOLD_KEY
           ] ??
@@ -660,7 +665,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (!Number.isFinite(thresholdInSeconds)) {
           JupyterNotification.emit(
             `Invalid default threshold value: Expected a finite number, but received ${
-              cellMetadata.threshold ?? 'undefined'
+              cellMetadata[CELL_DEFAULT_THRESHOLD_KEY] ?? 'undefined'
             }`,
             'error',
             { autoClose: 3000 },
@@ -671,7 +676,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
       if (mode === 'custom-timeout') {
         const thresholdValue =
-          cellMetadata.threshold ??
+          cellMetadata[CELL_CUSTOM_TIMEOUT_KEY] ??
           notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
             NOTEBOOK_CUSTOM_TIMEOUT_KEY
           ] ??
@@ -680,8 +685,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         if (!Number.isFinite(thresholdInSeconds)) {
           JupyterNotification.emit(
-            `Invalid custom threshold value: Expected a finite number, but received ${
-              cellMetadata.threshold ?? 'undefined'
+            `Invalid custom timeout value: Expected a finite number, but received ${
+              cellMetadata[CELL_CUSTOM_TIMEOUT_KEY] ?? 'undefined'
             }`,
             'error',
             { autoClose: 3000 },
@@ -690,6 +695,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
       }
 
+      const thresholdValue =
+        mode === 'default'
+          ? cellMetadata[CELL_DEFAULT_THRESHOLD_KEY] ??
+            notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
+              NOTEBOOK_DEFAULT_THRESHOLD_KEY
+            ] ??
+            notifySettings.defaultThreshold
+          : mode === 'custom-timeout'
+          ? cellMetadata[CELL_CUSTOM_TIMEOUT_KEY] ??
+            notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
+              NOTEBOOK_CUSTOM_TIMEOUT_KEY
+            ] ??
+            notifySettings.customTimeout
+          : notifySettings.defaultThreshold;
+
       const payload = {
         cell_id: cell.model.id,
         mode,
@@ -697,10 +717,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         slackEnabled: config.slack_configured && notifySettings.slack,
         successMessage: notifySettings.successMessage,
         failureMessage: notifySettings.failureMessage,
-        threshold:
-          mode === 'custom-timeout' || mode === 'default'
-            ? decodeThresholdToSeconds(cellMetadata.threshold!)
-            : notifySettings.defaultThreshold,
+        threshold: decodeThresholdToSeconds(thresholdValue),
       };
 
       const notification: ICellNotification = {
@@ -725,11 +742,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
       cellNotificationMap.set(cell.model.id, notification);
 
       if (payload.mode === 'custom-timeout') {
-        notification.timeoutId = setTimeout(() => {
-          if (!notification.notificationIssued) {
-            handleNotification(cell.model, true, args.notebook.id, true);
-          }
-        }, payload.threshold! * 1000);
+        const timeoutInSeconds = payload.threshold;
+        if (
+          Number.isFinite(timeoutInSeconds) &&
+          timeoutInSeconds !== null &&
+          timeoutInSeconds !== undefined
+        ) {
+          notification.timeoutId = setTimeout(() => {
+            if (!notification.notificationIssued) {
+              handleNotification(cell.model, true, args.notebook.id, true);
+            }
+          }, timeoutInSeconds * 1000);
+        }
       }
     });
     const trans = (translator ?? nullTranslator).load('jupyterlab-notify');
@@ -793,16 +817,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        // Get existing metadata to preserve threshold
+        // Get existing metadata to preserve thresholds
         const existingMetadata = cell.model.getMetadata(NOTIFY_METADATA_KEY) as
           | ICellMetadata
           | undefined;
 
         const metadata: ICellMetadata = { mode: modeId };
 
-        // Preserve existing threshold if present
-        if (existingMetadata?.threshold) {
-          metadata.threshold = existingMetadata.threshold;
+        // Preserve existing thresholds from both modes
+        if (existingMetadata?.[CELL_DEFAULT_THRESHOLD_KEY]) {
+          metadata[CELL_DEFAULT_THRESHOLD_KEY] =
+            existingMetadata[CELL_DEFAULT_THRESHOLD_KEY];
+        }
+        if (existingMetadata?.[CELL_CUSTOM_TIMEOUT_KEY]) {
+          metadata[CELL_CUSTOM_TIMEOUT_KEY] =
+            existingMetadata[CELL_CUSTOM_TIMEOUT_KEY];
         }
 
         // Override threshold if explicitly provided in args
@@ -811,18 +840,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
           if (!threshold) {
             if (modeId === 'default') {
               threshold =
+                existingMetadata?.[CELL_DEFAULT_THRESHOLD_KEY] ??
                 nbModel?.getMetadata(NOTIFY_METADATA_KEY)?.[
                   NOTEBOOK_DEFAULT_THRESHOLD_KEY
                 ];
             } else {
               threshold =
+                existingMetadata?.[CELL_CUSTOM_TIMEOUT_KEY] ??
                 nbModel?.getMetadata(NOTIFY_METADATA_KEY)?.[
                   NOTEBOOK_CUSTOM_TIMEOUT_KEY
                 ];
             }
           }
           if (threshold) {
-            metadata.threshold = threshold;
+            if (modeId === 'default') {
+              metadata[CELL_DEFAULT_THRESHOLD_KEY] = threshold;
+            } else {
+              metadata[CELL_CUSTOM_TIMEOUT_KEY] = threshold;
+            }
           }
         }
 
@@ -952,8 +987,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (current && current.content && current.content.activeCell) {
           const cell = current.content.activeCell;
           const prev = cell.model.getMetadata(NOTIFY_METADATA_KEY) || {};
-          if (prev.threshold) {
-            const parsed = parseThreshold(prev.threshold);
+          if (prev[CELL_CUSTOM_TIMEOUT_KEY]) {
+            const parsed = parseThreshold(prev[CELL_CUSTOM_TIMEOUT_KEY]);
             if (parsed) {
               value = parsed.value;
               unit = parsed.unit;
@@ -1077,7 +1112,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
       // Replace the tooltip
       let tooltip = MODES[modeId].label;
-      let threshold = metadata?.threshold;
+      let threshold =
+        modeId === 'default'
+          ? metadata?.[CELL_DEFAULT_THRESHOLD_KEY]
+          : modeId === 'custom-timeout'
+          ? metadata?.[CELL_CUSTOM_TIMEOUT_KEY]
+          : undefined;
       if (!threshold) {
         const nbMetadata = tracker.currentWidget?.model?.getMetadata(
           NOTIFY_METADATA_KEY,
@@ -1156,7 +1196,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
         'Notebook',
         'notifyType',
         args => {
-          const notebook = args.model!;
+          const notebook = args.model;
+          if (!notebook) {
+            return new ToolbarButton({});
+          }
 
           const metadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
             | ICellMetadata
@@ -1290,7 +1333,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
           | undefined;
         const modeId = metadata?.mode ?? notifySettings.defaultMode; // Fallback to default if metadata is unset
         let tooltip = MODES[modeId].label;
-        let threshold = metadata?.threshold;
+        let threshold =
+          modeId === 'default'
+            ? metadata?.[CELL_DEFAULT_THRESHOLD_KEY]
+            : modeId === 'custom-timeout'
+            ? metadata?.[CELL_CUSTOM_TIMEOUT_KEY]
+            : undefined;
         if (!threshold) {
           const nbMetadata = tracker.currentWidget?.model?.getMetadata(
             NOTIFY_METADATA_KEY,
