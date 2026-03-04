@@ -302,11 +302,10 @@ test('Notification triggers on kernel death on "on-error" mode', async ({
   // Execute a cell that kills kernel
   await page.notebook.enterCellEditingMode(0);
 
-  await page.keyboard.type('raise Exception("Error")');
   await page.keyboard.type(
     'import os, signal;os.kill(os.getpid(), signal.SIGKILL)',
   );
-  void page.notebook.runCell(0);
+  const runCellPromise = page.notebook.runCell(0);
   await page
     .locator('.jp-Dialog-header:has-text("Kernel Restarting")')
     .waitFor({ state: 'visible', timeout: 5000 });
@@ -317,6 +316,9 @@ test('Notification triggers on kernel death on "on-error" mode', async ({
   );
   expect(errorNotifications.length).toBe(1);
   expect(errorNotifications[0].title).toContain('Cell execution failed');
+
+  // Don't wait for the promise since kernel was killed
+  runCellPromise.catch(() => {});
 });
 
 test('Notification triggers only on timeout with "custom-timeout" mode', async ({
