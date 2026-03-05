@@ -389,7 +389,7 @@ test('Displays warning when email is enabled but not configured', async ({
   await page.evaluate(async () => {
     await window.jupyterapp.serviceManager.settings.save(
       'jupyterlab-notify:plugin',
-      JSON.stringify({ mail: true, defaultMode: "default" }),
+      JSON.stringify({ mail: true, defaultMode: 'default' }),
     );
   });
 
