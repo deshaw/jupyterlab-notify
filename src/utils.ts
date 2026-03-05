@@ -1,4 +1,8 @@
-import { Dialog, showErrorMessage, Notification as JupyterNotification } from '@jupyterlab/apputils';
+import {
+  Dialog,
+  showErrorMessage,
+  Notification as JupyterNotification,
+} from '@jupyterlab/apputils';
 import {
   TimeInputWidget,
   ITimeInputDialogOptions,
@@ -9,6 +13,12 @@ import {
   INotificationData,
   TIMEOUT_PATTERN,
   NOTEBOOK_FILE_EXTENSION,
+  ICellMetadata,
+  CELL_DEFAULT_THRESHOLD_KEY,
+  CELL_CUSTOM_TIMEOUT_KEY,
+  NOTEBOOK_DEFAULT_THRESHOLD_KEY,
+  NOTEBOOK_CUSTOM_TIMEOUT_KEY,
+  ModeId,
 } from './token';
 /**
  * Custom Time Input Dialog class
@@ -248,4 +258,88 @@ export function parseThreshold(
       return null;
   }
   return { value, unit };
+}
+
+/**
+ * Helper interface for timeout prompt options
+ */
+export interface ITimeoutPromptOptions {
+  title: string;
+  label: string;
+  placeholder: string;
+  errorMessage: string;
+  defaultValue?: number;
+  defaultUnit?: TimeUnit;
+}
+
+/**
+ * Retrieves the appropriate threshold value from cell, notebook, or settings
+ */
+export function getThresholdValue(
+  mode: ModeId,
+  cellMetadata: ICellMetadata | undefined,
+  notebookMetadata: Record<string, any> | undefined,
+  settingsDefaultThreshold: number | null,
+  settingsCustomTimeout: number | null,
+): string | number | null {
+  if (mode === 'default') {
+    return (
+      cellMetadata?.[CELL_DEFAULT_THRESHOLD_KEY] ??
+      notebookMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY] ??
+      settingsDefaultThreshold
+    );
+  }
+
+  if (mode === 'custom-timeout') {
+    return (
+      cellMetadata?.[CELL_CUSTOM_TIMEOUT_KEY] ??
+      notebookMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY] ??
+      settingsCustomTimeout
+    );
+  }
+
+  return settingsDefaultThreshold;
+}
+
+/**
+ * Helper to prompt for a timeout/threshold value and validate it
+ */
+export async function promptForTimeout(
+  options: ITimeoutPromptOptions,
+  translate: (key: string) => string,
+  showCheckbox = false,
+): Promise<{ value: string | null; applyToAll: boolean }> {
+  const timeResult = await TimeInputDialog.getText({
+    title: options.title,
+    label: options.label,
+    placeholder: options.placeholder,
+    defaultValue: options.defaultValue,
+    defaultUnit: options.defaultUnit,
+    ...(showCheckbox && {
+      checkbox: {
+        label: translate('Apply to all cells in this notebook'),
+      },
+    }),
+  });
+
+  if (!timeResult) {
+    return { value: null, applyToAll: false };
+  }
+
+  const rawInput =
+    String(timeResult.value) + (timeResult.unit ? timeResult.unit[0] : 's');
+  const lastChar = rawInput.slice(-1);
+  const input =
+    rawInput === ''
+      ? ''
+      : ['s', 'm', 'h'].includes(lastChar)
+      ? rawInput
+      : rawInput + 's';
+
+  if (!input || !TIMEOUT_PATTERN.test(input)) {
+    return { value: null, applyToAll: false };
+  }
+
+  const applyToAll = (showCheckbox ? timeResult.isChecked : false) ?? false;
+  return { value: input, applyToAll };
 }

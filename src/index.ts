@@ -19,12 +19,14 @@ import {
   Notification as JupyterNotification,
 } from '@jupyterlab/apputils';
 import {
-  TimeInputDialog,
   generateNotificationData,
   displayConfigWarning,
   decodeThresholdToSeconds,
   parseThreshold,
   caretSVG,
+  promptForTimeout,
+  getThresholdValue,
+  ITimeoutPromptOptions,
 } from './utils';
 import { TimeUnit } from './timeInput';
 import {
@@ -56,7 +58,6 @@ import {
   CELL_DEFAULT_THRESHOLD_KEY,
   CELL_CUSTOM_TIMEOUT_KEY,
   NB_TOOLBAR_NOTIFICATION_CLASS,
-  TIMEOUT_PATTERN,
 } from './token';
 
 namespace CommandIDs {
@@ -484,61 +485,56 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
       if (mode === 'default') {
         // Get the threshold value: prefer cell, then notebook, then settings
-        const thresholdValue =
-          cellMetadata[CELL_DEFAULT_THRESHOLD_KEY] ??
-          notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
-            NOTEBOOK_DEFAULT_THRESHOLD_KEY
-          ] ??
-          notifySettings.defaultThreshold;
-        const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
+        const thresholdValue = getThresholdValue(
+          mode,
+          cellMetadata,
+          notebook.model?.getMetadata(NOTIFY_METADATA_KEY),
+          notifySettings.defaultThreshold,
+          notifySettings.customTimeout,
+        );
 
-        if (!Number.isFinite(thresholdInSeconds)) {
-          JupyterNotification.emit(
-            `Invalid default threshold value: Expected a finite number, but received ${
-              cellMetadata[CELL_DEFAULT_THRESHOLD_KEY] ?? 'undefined'
-            }`,
-            'error',
-            { autoClose: 3000 },
-          );
-          return;
+        if (thresholdValue !== null && thresholdValue !== undefined) {
+          const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
+          if (!Number.isFinite(thresholdInSeconds)) {
+            JupyterNotification.emit(
+              `Invalid default threshold value: Expected a finite number, but received ${thresholdValue}`,
+              'error',
+              { autoClose: 3000 },
+            );
+            return;
+          }
         }
       }
 
       if (mode === 'custom-timeout') {
-        const thresholdValue =
-          cellMetadata[CELL_CUSTOM_TIMEOUT_KEY] ??
-          notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
-            NOTEBOOK_CUSTOM_TIMEOUT_KEY
-          ] ??
-          notifySettings.customTimeout;
-        const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
+        const thresholdValue = getThresholdValue(
+          mode,
+          cellMetadata,
+          notebook.model?.getMetadata(NOTIFY_METADATA_KEY),
+          notifySettings.defaultThreshold,
+          notifySettings.customTimeout,
+        );
 
-        if (!Number.isFinite(thresholdInSeconds)) {
-          JupyterNotification.emit(
-            `Invalid custom timeout value: Expected a finite number, but received ${
-              cellMetadata[CELL_CUSTOM_TIMEOUT_KEY] ?? 'undefined'
-            }`,
-            'error',
-            { autoClose: 3000 },
-          );
-          return;
+        if (thresholdValue !== null && thresholdValue !== undefined) {
+          const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
+          if (!Number.isFinite(thresholdInSeconds)) {
+            JupyterNotification.emit(
+              `Invalid custom timeout value: Expected a finite number, but received ${thresholdValue}`,
+              'error',
+              { autoClose: 3000 },
+            );
+            return;
+          }
         }
       }
 
-      const thresholdValue =
-        mode === 'default'
-          ? cellMetadata[CELL_DEFAULT_THRESHOLD_KEY] ??
-            notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
-              NOTEBOOK_DEFAULT_THRESHOLD_KEY
-            ] ??
-            notifySettings.defaultThreshold
-          : mode === 'custom-timeout'
-          ? cellMetadata[CELL_CUSTOM_TIMEOUT_KEY] ??
-            notebook.model?.getMetadata(NOTIFY_METADATA_KEY)?.[
-              NOTEBOOK_CUSTOM_TIMEOUT_KEY
-            ] ??
-            notifySettings.customTimeout
-          : notifySettings.defaultThreshold;
+      const thresholdValue = getThresholdValue(
+        mode,
+        cellMetadata,
+        notebook.model?.getMetadata(NOTIFY_METADATA_KEY),
+        notifySettings.defaultThreshold,
+        notifySettings.customTimeout,
+      );
 
       const executionCount = (cell.model as ICodeCellModel).executionCount;
 
@@ -549,14 +545,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
         slackEnabled: config.slack_configured && notifySettings.slack,
         successMessage: notifySettings.successMessage,
         failureMessage: notifySettings.failureMessage,
-        threshold: decodeThresholdToSeconds(thresholdValue),
+        threshold:
+          thresholdValue !== null && thresholdValue !== undefined
+            ? decodeThresholdToSeconds(thresholdValue)
+            : null,
         notebook_name: notebook.title.label,
         notebookId: notebook.id,
         execution_count:
           typeof executionCount === 'number' ? executionCount : null,
       };
 
-      // Payload contains notebook name already, why twice here??
       const notification: ICellNotification = {
         payload,
         timeoutId: null,
@@ -564,7 +562,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
         notebookId: args.notebook.id,
       };
 
-      // For backend see what we send as payload and what things we could
       if (config.nbmodel_installed) {
         try {
           await requestAPI('notify', {
@@ -595,7 +592,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
     const trans = (translator ?? nullTranslator).load('jupyterlab-notify');
 
-    // Add command to open Settings
     app.commands.addCommand(CommandIDs.openNotificationSettings, {
       label: trans.__('Settings..'),
       icon: settingsIcon,
@@ -606,7 +602,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       },
     });
 
-    // Command to set Notebook notificaion mode
     app.commands.addCommand(CommandIDs.setNotebookNotificationMode, {
       label: args => {
         if (args.label) {
@@ -620,7 +615,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const modeId = args.modeId;
         const notebook = tracker.currentWidget;
         if (notebook && notebook.model) {
-          // Update the notebook metadata properly
           const prev = notebook.model.getMetadata(NOTIFY_METADATA_KEY) || {};
           notebook.model.setMetadata(NOTIFY_METADATA_KEY, {
             ...prev,
@@ -630,7 +624,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       },
     });
 
-    // Command to set Cell notification mode and threshold
     app.commands.addCommand(CommandIDs.setNotificationMode, {
       label: args => {
         if (args.label) {
@@ -704,54 +697,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
         !!tracker.currentWidget && !!tracker.currentWidget.content.activeCell,
     });
 
-    // Helper to prompt for a timeout/threshold value and validate it
-    async function promptForTimeout(
-      options: {
-        title: string;
-        label: string;
-        placeholder: string;
-        errorMessage: string;
-        defaultValue?: number;
-        defaultUnit?: TimeUnit;
-      },
-      showCheckbox = false,
-    ): Promise<{ value: string | null; applyToAll: boolean }> {
-      const timeResult = await TimeInputDialog.getText({
-        title: options.title,
-        label: options.label,
-        placeholder: options.placeholder,
-        defaultValue: options.defaultValue,
-        defaultUnit: options.defaultUnit,
-        ...(showCheckbox && {
-          checkbox: {
-            label: trans.__('Apply to all cells in this notebook'),
-          },
-        }),
-      });
-
-      if (!timeResult) {
-        return { value: null, applyToAll: false };
-      }
-
-      const rawInput =
-        String(timeResult.value) + (timeResult.unit ? timeResult.unit[0] : 's');
-      const lastChar = rawInput.slice(-1);
-      const input =
-        rawInput === ''
-          ? ''
-          : ['s', 'm', 'h'].includes(lastChar)
-          ? rawInput
-          : rawInput + 's';
-
-      if (!input || !TIMEOUT_PATTERN.test(input)) {
-        return { value: null, applyToAll: false };
-      }
-
-      const applyToAll = (showCheckbox ? timeResult.isChecked : false) ?? false;
-      return { value: input, applyToAll };
-    }
-
-    // Command to set custom timeout in notebook metadata
     app.commands.addCommand(CommandIDs.setNotebookCustomTimeout, {
       label: trans.__('Set Custom Timeout'),
       caption: trans.__('Set Notebook Custom Timeout'),
@@ -771,7 +716,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             unit = parsed.unit;
           }
         }
-        const timeoutOptions = {
+        const timeoutOptions: ITimeoutPromptOptions = {
           title: 'Set Notebook Custom Timeout',
           label: 'Custom timeout value with unit:',
           placeholder: '30',
@@ -782,6 +727,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         };
         const { value: input, applyToAll } = await promptForTimeout(
           timeoutOptions,
+          trans.__,
           true,
         );
         if (input) {
@@ -811,7 +757,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       },
     });
 
-    // Command to set default threshold in notebook metadata
     app.commands.addCommand(CommandIDs.setNotebookDefaultThreshold, {
       label: trans.__('Set Default Threshold'),
       caption: trans.__('Set Notebook Default Threshold'),
@@ -831,7 +776,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             unit = parsed.unit;
           }
         }
-        const thresholdOptions = {
+        const thresholdOptions: ITimeoutPromptOptions = {
           title: 'Set Notebook Default Threshold',
           label: 'Default Threshold value with unit:',
           placeholder: '30',
@@ -842,6 +787,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         };
         const { value: input, applyToAll } = await promptForTimeout(
           thresholdOptions,
+          trans.__,
           true,
         );
         if (input) {
@@ -890,15 +836,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
             }
           }
         }
-        const { value: input } = await promptForTimeout({
-          title: 'Set Custom Timeout',
-          label: 'Custom timeout value with unit:',
-          placeholder: '30',
-          errorMessage:
-            'Please enter a positive number and select a unit (seconds, minutes, or hours).',
-          defaultValue: value,
-          defaultUnit: unit,
-        });
+        const { value: input } = await promptForTimeout(
+          {
+            title: 'Set Custom Timeout',
+            label: 'Custom timeout value with unit:',
+            placeholder: '30',
+            errorMessage:
+              'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+            defaultValue: value,
+            defaultUnit: unit,
+          } as ITimeoutPromptOptions,
+          trans.__,
+        );
         if (input) {
           await app.commands.execute(CommandIDs.setNotificationMode, {
             modeId: 'custom-timeout',

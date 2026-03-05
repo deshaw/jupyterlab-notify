@@ -389,7 +389,7 @@ test('Displays warning when email is enabled but not configured', async ({
   await page.evaluate(async () => {
     await window.jupyterapp.serviceManager.settings.save(
       'jupyterlab-notify:plugin',
-      JSON.stringify({ mail: true }),
+      JSON.stringify({ mail: true, defaultMode: "default" }),
     );
   });
 
@@ -404,7 +404,6 @@ test('Displays warning when email is enabled but not configured', async ({
 
   // Note: This test assumes that email configuration is not set up in the CI environment.
   // It may fail if run locally where email is configured.
-  // It may also fail locally if your default notification type is set to "never"
   const warning = await page.waitForSelector('.jp-toast-message', {
     timeout: 2000,
   });
