@@ -67,7 +67,7 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
     async def post(self) -> None:
         """Register a cell ID for notifications and optionally set up a timeout timer."""
         params, error = self._parse_request_body(self.request.body)
-        if error:
+        if error or not params:
             self.set_status(HTTPStatus.BAD_REQUEST)
             self.finish({"error": error})
             return
@@ -88,7 +88,7 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
         self.set_status(HTTPStatus.OK)
         self.finish({"accepted": True})
 
-    def _parse_request_body(self, body: bytes) -> Union[NotificationParams, str]:
+    def _parse_request_body(self, body: bytes) -> tuple[NotificationParams | None, str]:
         """
         Parse the JSON body and validate it against NotificationParams.
 
@@ -121,7 +121,6 @@ class NotifyTriggerHandler(ExtensionHandlerMixin, JupyterHandler):
     async def post(self) -> None:
         """Trigger a notification immediately based on the provided parameters."""
         params, error = self._parse_request_body(self.request.body)
-        print("params on trigger: ", params)
         if error or not params:
             self.set_status(HTTPStatus.BAD_REQUEST)
             self.finish({"error": error})

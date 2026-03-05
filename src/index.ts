@@ -567,10 +567,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
       };
 
       if (config.nbmodel_installed) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { execution_count: _, ...payloadWithoutExec } = payload;
         try {
           await requestAPI('notify', {
             method: 'POST',
-            body: JSON.stringify(payload),
+            body: JSON.stringify(payloadWithoutExec),
           });
         } catch (e) {
           console.error('Failed to notify server:', e);
