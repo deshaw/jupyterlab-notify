@@ -23,10 +23,9 @@ export class BatchNotifier {
   notify(type: NotifyType, data: INotificationData) {
     const notebookId = data.payload.notebookId;
     if (!notebookId) {
-      // If somehow notebookId is missing. Though this won't happen in current implementation.
+      // If somehow notebookId is missing.
       return;
     }
-
     if (!this.states[type][notebookId]) {
       this.states[type][notebookId] = { buffer: [], timer: null };
     }
@@ -65,6 +64,7 @@ export class BatchNotifier {
   }
 
   private async showSingle(data: INotificationData) {
+    console.log("data in showSingle: ", data);
     try {
       const mimeModel = new MimeModel({
         data: { [MIME_TYPE]: JSON.parse(JSON.stringify(data)) },

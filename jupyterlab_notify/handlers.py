@@ -121,14 +121,14 @@ class NotifyTriggerHandler(ExtensionHandlerMixin, JupyterHandler):
     async def post(self) -> None:
         """Trigger a notification immediately based on the provided parameters."""
         params, error = self._parse_request_body(self.request.body)
-        if error:
+        if error or not params:
             self.set_status(HTTPStatus.BAD_REQUEST)
             self.finish({"error": error})
             return
 
-        # If a timer exists, it is due to timout!
+        # If timer is true, it is due to timout!
         if params.timer:
-            # Starting a dummy timer as placeholder (TODO consider revisiting the strategy)
+            # Starting a dummy timer as placeholder
             params.timer = threading.Timer(10, lambda *args: None)
             params.timer.start()
 
@@ -136,7 +136,7 @@ class NotifyTriggerHandler(ExtensionHandlerMixin, JupyterHandler):
         self.set_status(HTTPStatus.OK)
         self.finish({"done": True})
 
-    def _parse_request_body(self, body: bytes) -> Union[NotificationParams, str]:
+    def _parse_request_body(self, body: bytes) -> tuple[NotificationParams | None, str]:
         """
         Parse and validate the JSON body for notification trigger.
 

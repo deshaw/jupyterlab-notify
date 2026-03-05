@@ -1,10 +1,12 @@
 import {
+  ILabShell,
   JupyterFrontEnd,
   JupyterFrontEndPlugin,
 } from '@jupyterlab/application';
 import {
   INotebookModel,
   INotebookTracker,
+  KernelError,
   NotebookActions,
   NotebookPanel,
 } from '@jupyterlab/notebook';
@@ -31,7 +33,7 @@ import {
 import { requestAPI } from './handler';
 import { Cell, ICellModel, ICodeCellModel } from '@jupyterlab/cells';
 import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
-import { MenuSvg } from '@jupyterlab/ui-components';
+import { TooltipMenuSvg } from './menuTooltip';
 import { BatchNotifier } from './batch_notify';
 import { createRendererFactory } from './mime';
 import { caretSVG } from './utils';
@@ -97,12 +99,24 @@ interface IInitialResponse {
   smtp_server_running: boolean;
 }
 
+interface INotifyPayload {
+  cell_id: string;
+  mode: ModeId;
+  emailEnabled: boolean;
+  slackEnabled: boolean;
+  successMessage: string;
+  failureMessage: string;
+  threshold: number | null;
+  notebook_name: string;
+  notebookId: string;
+  execution_count: number | null;
+}
+
 interface ICellNotification {
-  payload: any;
+  payload: INotifyPayload;
   timeoutId: number | null;
   notificationIssued: boolean;
   notebookId: string;
-  notebookName: string;
 }
 
 export interface INotificationData {
@@ -111,9 +125,9 @@ export interface INotificationData {
     title: string;
     body: string;
     cellId: string;
-    notebookId: string;
     notebookName: string;
     executionCount?: number;
+    notebookId: string;
   };
   isProcessed: boolean;
   id: string;
@@ -162,7 +176,7 @@ const buildNotificationTitle = (
   notebookName: string,
   message: string,
 ): string => {
-  return `[${notebookName}] ${message}`;
+  return `[${stripNotebookExtension(notebookName)}] ${message}`;
 };
 
 /**
@@ -171,17 +185,18 @@ const buildNotificationTitle = (
 const generateNotificationData = (
   message: string,
   cell_id: string,
-  notebookId: string,
   notebookName: string,
+  notebookId: string,
   executionCount: number | null,
 ): INotificationData => ({
   type: 'NOTIFY',
   payload: {
     title: buildNotificationTitle(notebookName, message),
+    // Maybe include id if count is unavilable
     body: typeof executionCount === 'number' ? `Cell: ${executionCount}` : '',
     cellId: cell_id,
-    notebookId: notebookId,
-    notebookName,
+    notebookName: stripNotebookExtension(notebookName),
+    notebookId,
     ...(typeof executionCount === 'number' ? { executionCount } : {}),
   },
   isProcessed: false,
@@ -289,10 +304,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
     console.log('JupyterLab extension jupyterlab-notify is activated!');
 
     const batchNotifier = new BatchNotifier(rendermime);
-    // Ensure app.shell is an ILabShell
-    const labShell = app.shell as any;
-    const rendererFactory = createRendererFactory(tracker, labShell);
-    // Register the mime extension for the rendermime registry
+    const rendererFactory = createRendererFactory(
+      tracker,
+      app.shell as ILabShell,
+    );
     rendermime.addFactory(rendererFactory, 0);
 
     // Default settings
@@ -334,21 +349,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     }
 
-    const resolveNotebookName = (notebookId: string): string => {
-      let notebookPathOrName: string | null = null;
-      tracker.forEach(panel => {
-        if (panel.content.id === notebookId) {
-          notebookPathOrName = panel.context.path || panel.title.label;
-        }
-      });
-
-      if (!notebookPathOrName) {
-        return 'Unknown Notebook';
-      }
-
-      return stripNotebookExtension(notebookPathOrName);
-    };
-
     const addCellMetadata = (
       cell: ICellModel,
       nbmodel: INotebookModel,
@@ -356,11 +356,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (cell.getMetadata(NOTIFY_METADATA_KEY)) {
         return;
       }
-      // If notebook metadata for NOTIFY_METADATA_KEY exists, use its mode for the cell; otherwise, use defaultMode
+      // If notebook metadata exists, use its mode for the cell; otherwise, use defaultMode
       const nbMetadata = nbmodel.getMetadata(NOTIFY_METADATA_KEY);
       const mode = nbMetadata?.mode ?? notifySettings.defaultMode;
       if (mode === 'default') {
-        // Use threshold from notebook metadata's NOTEBOOK_DEFAULT_THRESHOLD_KEY if present
+        // Use threshold from notebook metadata if present
         let nbThreshold = nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
         if (typeof nbThreshold === 'number') {
           nbThreshold = `${nbThreshold}s`;
@@ -386,7 +386,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
-    // Track new cells
+    // Track new notebooks
     tracker.widgetAdded.connect(async (_, notebookPanel: NotebookPanel) => {
       // Wait for the notebook to be fully ready
       await notebookPanel.revealed;
@@ -453,7 +453,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
               w => w.model.id === cellId,
             );
             if (cellWidget) {
-              await handleNotification(cellWidget.model, false, notebookId);
+              await handleNotification(cellWidget.model, false, false, {
+                errorName: 'Kernel Died',
+                name: 'Kernel Died',
+                errorValue: `The kernel has died. Status: "${kernel.status}"`,
+                message: `The kernel has died. Status: "${kernel.status}"`,
+                traceback: [],
+              });
             }
           }
         }
@@ -505,8 +511,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
     const handleNotification = async (
       cell: ICellModel,
       success: boolean,
-      notebookId: string,
-      threshold = false,
+      triggeredViaTimeout = false,
+      kernelError: KernelError | null = null,
     ): Promise<void> => {
       if (cell.type !== 'code') {
         return;
@@ -518,14 +524,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       const { payload } = notification;
-      if (payload.mode === 'on-error' && success && !threshold) {
+
+      if (payload.mode === 'on-error' && success && !triggeredViaTimeout) {
+        cellNotificationMap.delete(cellId);
         return;
       }
-      // Return for custom-timeout if this isn't triggered by reaching threshold or if cell already finished execution
+      // Return for custom-timeout if this isn't triggered by timeout or if cell already finished execution
       if (
         payload.mode === 'custom-timeout' &&
-        (!threshold || (cell as ICodeCellModel).executionState !== 'running')
+        (!triggeredViaTimeout ||
+          (cell as ICodeCellModel).executionState !== 'running')
       ) {
+        cellNotificationMap.delete(cellId);
         return;
       }
 
@@ -539,6 +549,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         // Skip notification if execution time is below the threshold
         if (
+          payload.threshold &&
           startTime &&
           endTime &&
           new Date(endTime).getTime() - new Date(startTime).getTime() <
@@ -549,7 +560,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       // Determine notification type based on execution state
-      const state: NotifyType = threshold
+      const state: NotifyType = triggeredViaTimeout
         ? 'timeout'
         : success
         ? 'completed'
@@ -561,12 +572,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
           ? notifySettings.successMessage
           : notifySettings.failureMessage;
       const executionCount = (cell as ICodeCellModel).executionCount;
+      console.log(executionCount, "execution count in handleNotification");
 
       const notificationData = generateNotificationData(
         message,
         cellId,
-        notebookId,
-        notification.notebookName || resolveNotebookName(notebookId),
+        payload.notebook_name,
+        payload.notebookId,
         typeof executionCount === 'number' ? executionCount : null,
       );
 
@@ -574,7 +586,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
         try {
           await requestAPI('notify-trigger', {
             method: 'POST',
-            body: JSON.stringify({ ...payload, timer: threshold }),
+            body: JSON.stringify({
+              ...payload,
+              timer: triggeredViaTimeout,
+              error: kernelError,
+            }),
           });
         } catch (e) {
           console.error('Failed to trigger notification:', e);
@@ -596,7 +612,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Execution listeners
     NotebookActions.executed.connect((_, args) => {
-      handleNotification(args.cell.model, args.success, args.notebook.id);
+      handleNotification(
+        args.cell.model,
+        args.success,
+        false,
+        args.error ?? null,
+      );
     });
 
     NotebookActions.executionScheduled.connect(async (_, args) => {
@@ -645,6 +666,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
         }
       }
+      // For making slack failure more verbose, we need more data from backend so we can display here
       if (notifySettings.slack && !config.slack_configured) {
         displayConfigWarning(
           'Slack',
@@ -711,9 +733,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
           : notifySettings.defaultThreshold;
 
       const executionCount = (cell.model as ICodeCellModel).executionCount;
-      const notebookName = resolveNotebookName(args.notebook.id);
 
-      const payload = {
+      const payload: INotifyPayload = {
         cell_id: cell.model.id,
         mode,
         emailEnabled: config.email_configured && notifySettings.mail,
@@ -721,19 +742,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
         successMessage: notifySettings.successMessage,
         failureMessage: notifySettings.failureMessage,
         threshold: decodeThresholdToSeconds(thresholdValue),
-        notebook_name: notebookName,
+        notebook_name: notebook.title.label,
+        notebookId: notebook.id,
         execution_count:
           typeof executionCount === 'number' ? executionCount : null,
       };
 
+      // Payload contains notebook name already, why twice here??
       const notification: ICellNotification = {
         payload,
         timeoutId: null,
         notificationIssued: false,
         notebookId: args.notebook.id,
-        notebookName: resolveNotebookName(args.notebook.id),
       };
 
+      // For backend see what we send as payload and what things we could
       if (config.nbmodel_installed) {
         try {
           await requestAPI('notify', {
@@ -756,7 +779,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         ) {
           notification.timeoutId = setTimeout(() => {
             if (!notification.notificationIssued) {
-              handleNotification(cell.model, true, args.notebook.id, true);
+              handleNotification(cell.model, true, true);
             }
           }, timeoutInSeconds * 1000);
         }
@@ -1078,20 +1101,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     // Menu for Cell Notification modes
-    const cellNotifyMenu = new MenuSvg({ commands: app.commands });
+    const cellNotifyMenu = new TooltipMenuSvg({ commands: app.commands });
     cellNotifyMenu.addClass('jp-notify-menu');
     cellNotifyMenu.title.label = trans.__('Cell Notification');
 
     Object.entries(MODES).forEach(([modeId, mode]) => {
       if (modeId === 'custom-timeout') {
-        const subMenu = new MenuSvg({ commands: app.commands });
+        const subMenu = new TooltipMenuSvg({ commands: app.commands });
         subMenu.title.label = mode.label;
         subMenu.title.icon = mode.icon;
         TIMEOUT_OPTIONS.forEach(option => {
           if (option.value === 'default') {
             subMenu.addItem({
               command: CommandIDs.setNotificationMode,
-              // Not sending threshold as it will be retrieved by the command from notebook's metadata
+              // Threshold will be retrieved by the command from notebook's metadata
               args: {
                 modeId: 'custom-timeout',
                 label: option.label,
@@ -1114,19 +1137,28 @@ const plugin: JupyterFrontEndPlugin<void> = {
             });
           }
         });
-        cellNotifyMenu.addItem({ type: 'submenu', submenu: subMenu });
+        cellNotifyMenu.addItem({
+          type: 'submenu',
+          submenu: subMenu,
+          args: {
+            tooltip: mode.info,
+          },
+        });
       } else if (modeId === 'default') {
         cellNotifyMenu.addItem({
           command: CommandIDs.setNotificationMode,
           args: {
             modeId,
-            // Not sending threshold as it will be retrieved by the command from notebook's metadata
+            tooltip: mode.info,
           },
         });
       } else {
         cellNotifyMenu.addItem({
           command: CommandIDs.setNotificationMode,
-          args: { modeId },
+          args: {
+            modeId,
+            tooltip: mode.info,
+          },
         });
       }
     });
@@ -1137,30 +1169,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
     cellNotifyMenu.addItem({
       type: 'command',
       command: CommandIDs.openNotificationSettings,
+      args: {
+        tooltip: 'dp-Open Notification Settings',
+      },
     });
 
-    setTimeout(() => {
-      cellNotifyMenu.node
-        .querySelectorAll('ul.lm-Menu-content > li.lm-Menu-item')
-        .forEach(li => {
-          const labelDiv = li.querySelector('.lm-Menu-itemLabel');
-          let modeId = '';
-          if (labelDiv && labelDiv.textContent) {
-            modeId = labelDiv.textContent
-              .trim()
-              .toLowerCase()
-              .replace(/\s+/g, '-');
-          }
-          if (Object.prototype.hasOwnProperty.call(MODES, modeId)) {
-            li.setAttribute('title', MODES[modeId as ModeId].info ?? '');
-          } else if (modeId === 'settings..') {
-            li.setAttribute('title', 'Go to Notification Settings');
-          }
-        });
-    }, 0);
-
-    // Menu for Cell Notification modes
-    const nbNotifyMenu = new MenuSvg({ commands: app.commands });
+    // Menu for Notebook Notification modes
+    const nbNotifyMenu = new TooltipMenuSvg({ commands: app.commands });
     nbNotifyMenu.addClass('jp-notify-menu');
     nbNotifyMenu.title.label = trans.__('Notebook Notification');
 
@@ -1249,13 +1264,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Toolbar factory for per-cell toolbar
     if (toolbarRegistry) {
-      // toolbarRegistry.addFactory<NotebookPanel>(
-      //   'Notebook',
-      //   'notifyType',
-      //   args => {
-      //     return new NotificationModeSwitcher(args, notifySettings, translator);
-      //   },
-      // );
       toolbarRegistry.addFactory<NotebookPanel>(
         'Notebook',
         'notifyType',
@@ -1303,6 +1311,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
                       args: {
                         modeId,
                         label,
+                        tooltip: mode.info,
                       },
                     });
                   } else if (modeId === 'default') {
@@ -1314,12 +1323,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
                       args: {
                         modeId,
                         label,
+                        tooltip: mode.info,
                       },
                     });
                   } else {
                     nbNotifyMenu.addItem({
                       command: CommandIDs.setNotebookNotificationMode,
-                      args: { modeId },
+                      args: {
+                        modeId,
+                        tooltip: mode.info,
+                      },
                     });
                   }
                 });
@@ -1331,45 +1344,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 nbNotifyMenu.addItem({
                   type: 'command',
                   command: CommandIDs.setNotebookDefaultThreshold,
+                  args: {
+                    tooltip:
+                      'Cells with "default" mode will use this threshold',
+                  },
                 });
                 nbNotifyMenu.addItem({
                   type: 'command',
                   command: CommandIDs.setNotebookCustomTimeout,
+                  args: {
+                    tooltip:
+                      'Cells with "custom-timeout" mode will use this timeout',
+                  },
                 });
-
-                // Update tooltips
-                setTimeout(() => {
-                  nbNotifyMenu.node
-                    .querySelectorAll('ul.lm-Menu-content > li.lm-Menu-item')
-                    .forEach(li => {
-                      const labelDiv = li.querySelector('.lm-Menu-itemLabel');
-                      let mode = '';
-                      if (labelDiv && labelDiv.textContent) {
-                        mode = labelDiv.textContent
-                          .trim()
-                          .toLowerCase()
-                          .replace(/\s+/g, '-')
-                          .replace(/\(\d+[smh]\)$/, '')
-                          .trim();
-                      }
-                      if (Object.prototype.hasOwnProperty.call(MODES, mode)) {
-                        li.setAttribute(
-                          'title',
-                          MODES[mode as ModeId].info ?? '',
-                        );
-                      } else if (mode === 'set-default-threshold') {
-                        li.setAttribute(
-                          'title',
-                          'Set value of default notification threshold for this notebook',
-                        );
-                      } else if (mode === 'set-custom-timeout') {
-                        li.setAttribute(
-                          'title',
-                          'Set value of custom notification timeout for this notebook',
-                        );
-                      }
-                    });
-                }, 0);
 
                 const rect = button.node.getBoundingClientRect();
                 nbNotifyMenu.open(rect.right, rect.bottom, {

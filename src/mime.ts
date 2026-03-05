@@ -201,7 +201,6 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
 
 /**
  * Function for creating a mime renderer factory for desktop-notify data.
- * This has been implemented this way for adding tracker and shell from main plugin
  */
 export function createRendererFactory(
   notebookTracker: INotebookTracker,

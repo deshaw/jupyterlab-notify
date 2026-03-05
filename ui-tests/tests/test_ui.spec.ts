@@ -138,6 +138,7 @@ test('Toggle notification mode updates icon and metadata', async ({ page }) => {
   icon = await toolbarButton.locator('svg').getAttribute('data-icon');
   expect(icon).toBe('notify:bell-outline'); // bellOutlineIcon
   await expect(metadata).toContainText('"mode": "default"');
+  await expect(metadata).toContainText('"defaultThreshold": "30s"');
 
   // Toggle to 'on-error'
   await selectNotificationMode(page, 0, 'On error');
@@ -156,12 +157,12 @@ test('Toggle notification mode updates icon and metadata', async ({ page }) => {
   icon = await toolbarButton.locator('svg').getAttribute('data-icon');
   expect(icon).toBe('notify:bell-clock'); // bellClockIcon for custom timeout
   await expect(metadata).toContainText('"mode": "custom-timeout"');
-  await expect(metadata).toContainText('"threshold": "1m"');
+  await expect(metadata).toContainText('"customTimeout": "1m"');
 
   // Toggle to 'custom-timeout' with 30 min option
   await selectNotificationMode(page, 0, 'Custom Timeout', '30 min');
   await expect(metadata).toContainText('"mode": "custom-timeout"');
-  await expect(metadata).toContainText('"threshold": "30m"');
+  await expect(metadata).toContainText('"customTimeout": "30m"');
 
   // Test valid custom input
   await selectNotificationMode(
@@ -173,7 +174,7 @@ test('Toggle notification mode updates icon and metadata', async ({ page }) => {
     'seconds',
   );
   await expect(metadata).toContainText('"mode": "custom-timeout"');
-  await expect(metadata).toContainText('"threshold": "4s"');
+  await expect(metadata).toContainText('"customTimeout": "4s"');
 
   // Test valid custom input
   await selectNotificationMode(
@@ -185,7 +186,7 @@ test('Toggle notification mode updates icon and metadata', async ({ page }) => {
     'hours',
   );
   await expect(metadata).toContainText('"mode": "custom-timeout"');
-  await expect(metadata).toContainText('"threshold": "4h"');
+  await expect(metadata).toContainText('"customTimeout": "4h"');
 });
 
 test('Notification triggers on cell execution with "default" mode', async ({
@@ -403,6 +404,7 @@ test('Displays warning when email is enabled but not configured', async ({
 
   // Note: This test assumes that email configuration is not set up in the CI environment.
   // It may fail if run locally where email is configured.
+  // It may also fail locally if your default notification type is set to "never"
   const warning = await page.waitForSelector('.jp-toast-message', {
     timeout: 2000,
   });
