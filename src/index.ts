@@ -12,17 +12,20 @@ import {
 } from '@jupyterlab/notebook';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { ITranslator, nullTranslator } from '@jupyterlab/translation';
-import {
-  LabIcon,
-  ToolbarButton,
-  settingsIcon,
-} from '@jupyterlab/ui-components';
+import { ToolbarButton, settingsIcon } from '@jupyterlab/ui-components';
 import {
   IToolbarWidgetRegistry,
   showErrorMessage,
   Notification as JupyterNotification,
 } from '@jupyterlab/apputils';
-import { TimeInputDialog } from './utils';
+import {
+  TimeInputDialog,
+  generateNotificationData,
+  displayConfigWarning,
+  decodeThresholdToSeconds,
+  parseThreshold,
+  caretSVG,
+} from './utils';
 import { TimeUnit } from './timeInput';
 import {
   bellOutlineIcon,
@@ -36,7 +39,25 @@ import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 import { TooltipMenuSvg } from './menuTooltip';
 import { BatchNotifier } from './batch_notify';
 import { createRendererFactory } from './mime';
-import { caretSVG } from './utils';
+import {
+  IExecutionTimingMetadata,
+  IMode,
+  INotifySettings,
+  ICellMetadata,
+  IInitialResponse,
+  INotifyPayload,
+  ICellNotification,
+  ModeId,
+  NotifyType,
+  TIMEOUT_OPTIONS,
+  NOTIFY_METADATA_KEY,
+  NOTEBOOK_DEFAULT_THRESHOLD_KEY,
+  NOTEBOOK_CUSTOM_TIMEOUT_KEY,
+  CELL_DEFAULT_THRESHOLD_KEY,
+  CELL_CUSTOM_TIMEOUT_KEY,
+  NB_TOOLBAR_NOTIFICATION_CLASS,
+  TIMEOUT_PATTERN,
+} from './token';
 
 namespace CommandIDs {
   export const setNotificationMode = 'notify:set-notification-mode';
@@ -48,95 +69,6 @@ namespace CommandIDs {
   export const setNotebookNotificationMode =
     'notify:set-notebook-notification-mode';
 }
-
-// Timeout options for the submenu
-const TIMEOUT_OPTIONS = [
-  { label: 'default', value: 'default' },
-  { label: '1 min', value: '1m' },
-  { label: '30 min', value: '30m' },
-  { label: 'Custom', value: 'custom' },
-];
-
-const NOTIFY_METADATA_KEY = 'jupyterlab_notify.notify';
-const NOTEBOOK_DEFAULT_THRESHOLD_KEY = 'defaultThreshold';
-const NOTEBOOK_CUSTOM_TIMEOUT_KEY = 'customTimeout';
-const CELL_DEFAULT_THRESHOLD_KEY = 'defaultThreshold';
-const CELL_CUSTOM_TIMEOUT_KEY = 'customTimeout';
-const NB_TOOLBAR_NOTIFICATION_CLASS = 'jp-Toolbar-notification-mode';
-
-interface IExecutionTimingMetadata {
-  'shell.execute_reply.started': string;
-  'shell.execute_reply': string;
-  execution_failed: string;
-}
-
-// Interfaces
-interface IMode {
-  label: string;
-  icon: LabIcon;
-}
-
-interface INotifySettings {
-  defaultMode: ModeId;
-  failureMessage: string;
-  mail: boolean;
-  slack: boolean;
-  successMessage: string;
-  defaultThreshold: number | null;
-  customTimeout: number | null;
-}
-
-interface ICellMetadata {
-  mode: ModeId;
-  defaultThreshold?: string;
-  customTimeout?: string;
-}
-
-interface IInitialResponse {
-  nbmodel_installed: boolean;
-  email_configured: boolean;
-  slack_configured: boolean;
-  smtp_server_running: boolean;
-}
-
-interface INotifyPayload {
-  cell_id: string;
-  mode: ModeId;
-  emailEnabled: boolean;
-  slackEnabled: boolean;
-  successMessage: string;
-  failureMessage: string;
-  threshold: number | null;
-  notebook_name: string;
-  notebookId: string;
-  execution_count: number | null;
-}
-
-interface ICellNotification {
-  payload: INotifyPayload;
-  timeoutId: number | null;
-  notificationIssued: boolean;
-  notebookId: string;
-}
-
-export interface INotificationData {
-  type: string;
-  payload: {
-    title: string;
-    body: string;
-    cellId: string;
-    notebookName: string;
-    executionCount?: number;
-    notebookId: string;
-  };
-  isProcessed: boolean;
-  id: string;
-}
-
-// Constants
-const ModeIds = ['default', 'never', 'on-error', 'custom-timeout'] as const;
-type ModeId = (typeof ModeIds)[number];
-export type NotifyType = 'completed' | 'failed' | 'timeout';
 
 const MODES: Record<ModeId, IMode & { info: string }> = {
   default: {
@@ -160,129 +92,6 @@ const MODES: Record<ModeId, IMode & { info: string }> = {
     info: 'Notify after a custom timeout, regardless of execution result.',
   },
 };
-
-// Regular expression for validating timeout input
-const TIMEOUT_PATTERN = /^(\d+(\.\d+)?)([smh])$/;
-const NOTEBOOK_FILE_EXTENSION = '.ipynb';
-
-const stripNotebookExtension = (pathOrName: string): string => {
-  const notebookName = pathOrName.split('/').pop() ?? pathOrName;
-  return notebookName.endsWith(NOTEBOOK_FILE_EXTENSION)
-    ? notebookName.slice(0, -NOTEBOOK_FILE_EXTENSION.length)
-    : notebookName;
-};
-
-const buildNotificationTitle = (
-  notebookName: string,
-  message: string,
-): string => {
-  return `[${stripNotebookExtension(notebookName)}] ${message}`;
-};
-
-/**
- * Generates notification data for desktop alerts.
- */
-const generateNotificationData = (
-  message: string,
-  cell_id: string,
-  notebookName: string,
-  notebookId: string,
-  executionCount: number | null,
-): INotificationData => ({
-  type: 'NOTIFY',
-  payload: {
-    title: buildNotificationTitle(notebookName, message),
-    // Maybe include id if count is unavilable
-    body: typeof executionCount === 'number' ? `Cell: ${executionCount}` : '',
-    cellId: cell_id,
-    notebookName: stripNotebookExtension(notebookName),
-    notebookId,
-    ...(typeof executionCount === 'number' ? { executionCount } : {}),
-  },
-  isProcessed: false,
-  id: `notify-${Math.random().toString(36).substring(2)}`,
-});
-
-/**
- * Displays configuration warning for unconfigured services
- */
-const displayConfigWarning = (
-  service: 'Email' | 'Slack',
-  configKey: string,
-  example: string,
-): void => {
-  JupyterNotification.emit(`${service} Not Configured`, 'error', {
-    autoClose: 3000,
-    actions: [
-      {
-        label: 'Help',
-        callback: () =>
-          showErrorMessage(`${service} Not Configured`, {
-            message: `Add a ${service.toLowerCase()} configuration to directory listed under the config section of jupyter --paths (e.g., ~/.jupyter/jupyter_notify_config.json) to enable ${service.toLowerCase()} notifications. Example: \n{\n  "${configKey}": "${example}"}"\n}. If you've already configured it, there might be an issue. Please check the terminal for errors and review your setup.`,
-          }),
-      },
-    ],
-  });
-};
-
-// Function to decode threshold to seconds
-function decodeThresholdToSeconds(threshold: string | number) {
-  if (typeof threshold === 'number') {
-    return threshold;
-  }
-  const match = threshold.match(TIMEOUT_PATTERN);
-  if (!match) {
-    return null;
-  }
-  const value = parseFloat(match[1]);
-  const unit = match[3];
-  switch (unit) {
-    case 's':
-      return value;
-    case 'm':
-      return value * 60;
-    case 'h':
-      return value * 3600;
-    default:
-      return null;
-  }
-}
-
-/**
- * Parses a threshold string like '2s', '5m', '1.5h' and returns value and TimeUnit.
- * Returns null if the input is invalid.
- */
-function parseThreshold(
-  threshold?: string | number,
-): { value: number; unit: TimeUnit } | null {
-  if (!threshold) {
-    return null;
-  }
-  if (typeof threshold === 'number') {
-    return { value: threshold, unit: TimeUnit.SECONDS };
-  }
-  const match = threshold.match(/^(\d+(\.\d+)?)([smh])$/);
-  if (!match) {
-    return null;
-  }
-  const value = parseFloat(match[1]);
-  const unitChar = match[3];
-  let unit: TimeUnit;
-  switch (unitChar) {
-    case 's':
-      unit = TimeUnit.SECONDS;
-      break;
-    case 'm':
-      unit = TimeUnit.MINUTES;
-      break;
-    case 'h':
-      unit = TimeUnit.HOURS;
-      break;
-    default:
-      return null;
-  }
-  return { value, unit };
-}
 
 /**
  * Main plugin definition
@@ -572,7 +381,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
           ? notifySettings.successMessage
           : notifySettings.failureMessage;
       const executionCount = (cell as ICodeCellModel).executionCount;
-      console.log(executionCount, "execution count in handleNotification");
 
       const notificationData = generateNotificationData(
         message,
@@ -1170,7 +978,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       type: 'command',
       command: CommandIDs.openNotificationSettings,
       args: {
-        tooltip: 'dp-Open Notification Settings',
+        tooltip: 'Open Notification Settings',
       },
     });
 

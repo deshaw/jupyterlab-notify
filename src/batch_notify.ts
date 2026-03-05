@@ -1,6 +1,6 @@
 import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 import { MimeModel } from '@jupyterlab/rendermime';
-import type { INotificationData, NotifyType } from './index';
+import type { INotificationData, NotifyType } from './token';
 
 const MIME_TYPE = 'application/desktop-notify+json';
 
@@ -64,7 +64,6 @@ export class BatchNotifier {
   }
 
   private async showSingle(data: INotificationData) {
-    console.log("data in showSingle: ", data);
     try {
       const mimeModel = new MimeModel({
         data: { [MIME_TYPE]: JSON.parse(JSON.stringify(data)) },
