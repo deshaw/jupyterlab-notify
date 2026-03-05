@@ -121,6 +121,7 @@ class NotifyTriggerHandler(ExtensionHandlerMixin, JupyterHandler):
     async def post(self) -> None:
         """Trigger a notification immediately based on the provided parameters."""
         params, error = self._parse_request_body(self.request.body)
+        print("params on trigger: ", params)
         if error or not params:
             self.set_status(HTTPStatus.BAD_REQUEST)
             self.finish({"error": error})

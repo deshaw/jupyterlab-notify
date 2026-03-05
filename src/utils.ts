@@ -20,6 +20,7 @@ import {
   NOTEBOOK_CUSTOM_TIMEOUT_KEY,
   ModeId,
 } from './token';
+import { ITranslator, nullTranslator } from '@jupyterlab/translation';
 /**
  * Custom Time Input Dialog class
  */
@@ -306,9 +307,11 @@ export function getThresholdValue(
  */
 export async function promptForTimeout(
   options: ITimeoutPromptOptions,
-  translate: (key: string) => string,
   showCheckbox = false,
+  translator?: ITranslator,
 ): Promise<{ value: string | null; applyToAll: boolean }> {
+  translator = translator || nullTranslator;
+  const trans = translator.load('jupyterlab');
   const timeResult = await TimeInputDialog.getText({
     title: options.title,
     label: options.label,
@@ -317,7 +320,7 @@ export async function promptForTimeout(
     defaultUnit: options.defaultUnit,
     ...(showCheckbox && {
       checkbox: {
-        label: translate('Apply to all cells in this notebook'),
+        label: trans.__('Apply to all cells in this notebook'),
       },
     }),
   });

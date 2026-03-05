@@ -334,6 +334,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       const { payload } = notification;
+      payload.execution_count = (cell as ICodeCellModel).executionCount;
 
       if (payload.mode === 'on-error' && success && !triggeredViaTimeout) {
         cellNotificationMap.delete(cellId);
@@ -397,8 +398,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
             method: 'POST',
             body: JSON.stringify({
               ...payload,
+              success,
               timer: triggeredViaTimeout,
-              error: kernelError,
+              error: kernelError
+                ? `${kernelError.errorName}: ${kernelError.errorValue}`
+                : '',
             }),
           });
         } catch (e) {
@@ -727,8 +731,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
         };
         const { value: input, applyToAll } = await promptForTimeout(
           timeoutOptions,
-          trans.__,
           true,
+          translator ?? undefined,
         );
         if (input) {
           current.model.setMetadata(NOTIFY_METADATA_KEY, {
@@ -787,8 +791,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
         };
         const { value: input, applyToAll } = await promptForTimeout(
           thresholdOptions,
-          trans.__,
           true,
+          translator ?? undefined,
         );
         if (input) {
           const prev = current.model.getMetadata(NOTIFY_METADATA_KEY) || {};
@@ -846,7 +850,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
             defaultValue: value,
             defaultUnit: unit,
           } as ITimeoutPromptOptions,
-          trans.__,
+          false,
+          translator ?? undefined,
         );
         if (input) {
           await app.commands.execute(CommandIDs.setNotificationMode, {
