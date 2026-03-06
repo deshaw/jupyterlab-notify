@@ -1,171 +1,64 @@
-declare global {
-  interface Window {
-    mockNotifications: Array<{ title: string; body?: string }>;
-  }
-}
+import { test, expect } from '@jupyterlab/galata';
+import {
+  setupNotificationMock,
+  createNewNotebook,
+  selectCellNotificationMode,
+} from './helpers';
 
-import { test, expect, IJupyterLabPageFixture } from '@jupyterlab/galata';
-
-// Not same as ModeId of index.ts, these are UI labels
-type ModeId = 'Default' | 'Never' | 'On error' | 'Custom Timeout';
-
-async function setupNotificationMock(
-  page: IJupyterLabPageFixture,
-): Promise<void> {
-  await page.evaluate(() => {
-    window.mockNotifications = [];
-
-    // Mock the Notification constructor
-    const MockNotification = function (
-      title: string,
-      options?: NotificationOptions,
-    ) {
-      window.mockNotifications.push({ title, body: options?.body });
-    } as any;
-
-    window.Notification = MockNotification;
-
-    // Override the read-only 'permission' property
-    Object.defineProperty(window.Notification, 'permission', {
-      value: 'granted',
-      writable: true,
-      configurable: true,
-    });
-
-    // Mock requestPermission
-    window.Notification.requestPermission = async () => 'granted';
-  });
-}
-
-// Helper function to select notification mode
-async function selectNotificationMode(
-  page: IJupyterLabPageFixture,
-  cellIdx: number,
-  mode: ModeId,
-  submode: string | null = null,
-  value: string | null = null,
-  unit: string | null = null,
-) {
-  await page.notebook.enterCellEditingMode(cellIdx);
-  const cell = await page.notebook.getCellLocator(cellIdx);
-  const cellToolbarButton = cell!.locator(
-    '[data-jp-item-name="cellNotifyMenu"]',
-  );
-  await cellToolbarButton.click();
-
-  const cellNotifyMenu = page.locator('.lm-Menu');
-  await expect(cellNotifyMenu).toBeVisible();
-  await cellNotifyMenu.locator(`.lm-Menu-item:has-text("${mode}")`).click();
-
-  // Handle submenu for custom timeout options
-  if (submode) {
-    const notifySubMenu = page.locator('.lm-Menu').last();
-    await expect(notifySubMenu).toBeVisible();
-    await cellNotifyMenu
-      .locator(`.lm-Menu-item:has-text('${submode}')`)
-      .last()
-      .click();
-
-    // Handle custom value input
-    if (value) {
-      await page.locator('.jp-notify-time-input-field ').fill(value);
-      if (unit) {
-        await page
-          .locator('select.jp-notify-time-unit-select')
-          .selectOption({ value: unit });
-      }
-      await page.keyboard.press('Enter');
-    }
-  }
-}
-
-// Helper function to modify settings #TODO doesn't work!
-// async function setNotifySettings(page: IJupyterLabPageFixture, settings: any) {
-//   await page.evaluate(async () => {
-//     await window.jupyterapp.serviceManager.settings.save(
-//       'jupyterlab-notify:plugin',
-//       JSON.stringify(settings),
-//     );
-//   });
-
-//   // Reload so that new settings are applied
-//   await page.reload();
-// }
-
-async function createNewNotebook(page: IJupyterLabPageFixture, name: string) {
-  // Create a new notebook
-  await page.notebook.createNew(name);
-
-  // Select default kernel if dialog appears
-  const selectButton = page.locator('.jp-mod-accept:has-text("Select")');
-  if (await selectButton.isVisible()) {
-    await selectButton.click();
-  }
-}
-
-/**
- * Test for the jupyterlab-notify extension to verify that
- * toggling notification modes correctly updates both the toolbar
- * icon and cell metadata.
- */
 test('Toggle notification mode updates icon and metadata', async ({ page }) => {
-  // Create a new notebook
   await createNewNotebook(page, 'test.ipynb');
   await page.sidebar.close('left');
 
-  // Select the first cell
   await page.notebook.enterCellEditingMode(0);
 
-  // Find the notify toolbar button
   const firstCell = await page.notebook.getCellLocator(0);
   const toolbarButton = firstCell!.locator(
     '[data-jp-item-name="cellNotifyMenu"]',
   );
   expect(await toolbarButton.isVisible()).toBe(true);
 
-  // Setup to verify cell-metadata
   await page.sidebar.open('right');
   await page.locator('.jp-Collapse-header:has-text("ADVANCED TOOLS")').click();
   const metadata = page.locator('.jp-JSONEditor-host').first();
 
   // Check initial icon and metadata (default mode: 'default')
   let icon = await toolbarButton.locator('svg').getAttribute('data-icon');
-  expect(icon).toBe('notify:bell-outline'); // bellOutlineIcon
+  expect(icon).toBe('notify:bell-outline');
   await expect(metadata).toContainText('"mode": "default"');
 
   // Toggle to 'default'
-  await selectNotificationMode(page, 0, 'Default');
+  await selectCellNotificationMode(page, 0, 'Default');
   icon = await toolbarButton.locator('svg').getAttribute('data-icon');
   expect(icon).toBe('notify:bell-outline'); // bellOutlineIcon
   await expect(metadata).toContainText('"mode": "default"');
   await expect(metadata).toContainText('"defaultThreshold": "30s"');
 
   // Toggle to 'on-error'
-  await selectNotificationMode(page, 0, 'On error');
+  await selectCellNotificationMode(page, 0, 'On error');
   icon = await toolbarButton.locator('svg').getAttribute('data-icon');
   expect(icon).toBe('notify:bell-alert'); // bellAlertIcon
   await expect(metadata).toContainText('"mode": "on-error"');
 
   // Toggle to 'never'
-  await selectNotificationMode(page, 0, 'Never');
+  await selectCellNotificationMode(page, 0, 'Never');
   icon = await toolbarButton.locator('svg').getAttribute('data-icon');
   expect(icon).toBe('notify:bell-off'); // bellClockIcon
   await expect(metadata).toContainText('"mode": "never"');
 
   // Toggle to 'custom-timeout' with 1 min option
-  await selectNotificationMode(page, 0, 'Custom Timeout', '1 min');
+  await selectCellNotificationMode(page, 0, 'Custom Timeout', '1 min');
   icon = await toolbarButton.locator('svg').getAttribute('data-icon');
   expect(icon).toBe('notify:bell-clock'); // bellClockIcon for custom timeout
   await expect(metadata).toContainText('"mode": "custom-timeout"');
   await expect(metadata).toContainText('"customTimeout": "1m"');
 
   // Toggle to 'custom-timeout' with 30 min option
-  await selectNotificationMode(page, 0, 'Custom Timeout', '30 min');
+  await selectCellNotificationMode(page, 0, 'Custom Timeout', '30 min');
   await expect(metadata).toContainText('"mode": "custom-timeout"');
   await expect(metadata).toContainText('"customTimeout": "30m"');
 
   // Test valid custom input
-  await selectNotificationMode(
+  await selectCellNotificationMode(
     page,
     0,
     'Custom Timeout',
@@ -177,7 +70,7 @@ test('Toggle notification mode updates icon and metadata', async ({ page }) => {
   await expect(metadata).toContainText('"customTimeout": "4s"');
 
   // Test valid custom input
-  await selectNotificationMode(
+  await selectCellNotificationMode(
     page,
     0,
     'Custom Timeout',
@@ -202,16 +95,14 @@ test('Notification triggers on cell execution with "default" mode', async ({
   // Reload so that new settings are applied
   await page.reload();
 
-  // To Capture notifications in MockNotifications array (needs to be setup after applying settings)
+  // To Capture notifications in MockNotifications array
   await setupNotificationMock(page);
 
   await createNewNotebook(page, 'test.ipynb');
   await page.sidebar.close('left');
 
-  // Toggle to 'always'
-  await selectNotificationMode(page, 0, 'Default');
+  await selectCellNotificationMode(page, 0, 'Default');
 
-  // Execute a cell with execution time below threshold time
   await page.notebook.enterCellEditingMode(0);
   await page.keyboard.type('1');
   await page.notebook.runCell(0);
@@ -241,7 +132,7 @@ test('Notification triggers on cell execution with "default" mode', async ({
   expect(successNotifications[0].body).toMatch(/Cell: \d+/);
 
   // Execute a failing cell
-  await selectNotificationMode(page, 1, 'Default');
+  await selectCellNotificationMode(page, 1, 'Default');
   await page.notebook.enterCellEditingMode(1);
   await page.keyboard.type('sleep(0.5);raise Exception("Error")');
   await page.notebook.runCell(1);
@@ -260,12 +151,10 @@ test('Notification triggers only on error with "on-error" mode', async ({
 }) => {
   await setupNotificationMock(page);
 
-  // Create a new notebook
   await createNewNotebook(page, 'test.ipynb');
   await page.sidebar.close('left');
 
-  // Toggle to 'on-error'
-  await selectNotificationMode(page, 0, 'On error');
+  await selectCellNotificationMode(page, 0, 'On error');
 
   // Execute a successful cell
   await page.notebook.enterCellEditingMode(0);
@@ -299,7 +188,7 @@ test('Notification triggers on kernel death on "on-error" mode', async ({
   await setupNotificationMock(page);
   await createNewNotebook(page, 'test.ipynb');
   await page.sidebar.close('left');
-  await selectNotificationMode(page, 0, 'On error');
+  await selectCellNotificationMode(page, 0, 'On error');
 
   // Execute a cell that kills kernel
   await page.notebook.enterCellEditingMode(0);
@@ -332,7 +221,7 @@ test('Notification triggers only on timeout with "custom-timeout" mode', async (
   await page.sidebar.close('left');
 
   // Toggle to 'custom-timeout' with custom timout value
-  await selectNotificationMode(
+  await selectCellNotificationMode(
     page,
     0,
     'Custom Timeout',
@@ -362,7 +251,7 @@ test('Notification does not trigger on execution completion with "custom-timeout
   await page.sidebar.close('left');
 
   // Toggle to 'custom-timeout' with custom timout value
-  await selectNotificationMode(
+  await selectCellNotificationMode(
     page,
     0,
     'Custom Timeout',
