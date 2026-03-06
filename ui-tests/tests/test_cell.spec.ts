@@ -119,6 +119,7 @@ test('Notification triggers on cell execution with "default" mode', async ({
   await page.keyboard.press('Shift+Backspace');
   await page.keyboard.type('from time import sleep;sleep(0.6)');
   await page.notebook.runCell(0);
+  await page.waitForTimeout(500); // Wait for notification
 
   // Verify successful notification
   const successNotifications = await page.evaluate(() => {
