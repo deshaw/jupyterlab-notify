@@ -253,6 +253,7 @@ export async function openCellMetadata(
   page: IJupyterLabPageFixture,
   cellIdx: number,
 ): Promise<any> {
+  await page.sidebar.close('right');
   await page.notebook.selectCells(cellIdx);
   await page.notebook.enterCellEditingMode(cellIdx);
 
