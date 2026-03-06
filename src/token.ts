@@ -33,7 +33,7 @@ export interface INotifySettings {
 /**
  * Metadata associated with a cell
  */
-export interface ICellMetadata {
+export interface INotifyMetadata {
   mode: ModeId;
   defaultThreshold?: string;
   customTimeout?: string;

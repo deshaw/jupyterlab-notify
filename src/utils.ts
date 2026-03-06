@@ -13,7 +13,7 @@ import {
   INotificationData,
   TIMEOUT_PATTERN,
   NOTEBOOK_FILE_EXTENSION,
-  ICellMetadata,
+  INotifyMetadata,
   CELL_DEFAULT_THRESHOLD_KEY,
   CELL_CUSTOM_TIMEOUT_KEY,
   NOTEBOOK_DEFAULT_THRESHOLD_KEY,
@@ -278,7 +278,7 @@ export interface ITimeoutPromptOptions {
  */
 export function getThresholdValue(
   mode: ModeId,
-  cellMetadata: ICellMetadata | undefined,
+  cellMetadata: INotifyMetadata | undefined,
   notebookMetadata: Record<string, any> | undefined,
   settingsDefaultThreshold: number | null,
   settingsCustomTimeout: number | null,

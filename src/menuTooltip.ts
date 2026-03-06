@@ -1,4 +1,4 @@
-import { MenuSvg } from '@jupyterlab/ui-components';
+import { MenuSvg, checkIcon } from '@jupyterlab/ui-components';
 import { Message } from '@lumino/messaging';
 
 /**
@@ -8,15 +8,15 @@ import { Message } from '@lumino/messaging';
 export class TooltipMenuSvg extends MenuSvg {
   protected onUpdateRequest(msg: Message): void {
     super.onUpdateRequest(msg);
-    this._applyTooltips();
+    this._applyItemAttributes();
   }
 
   protected onAfterAttach(msg: Message): void {
     super.onAfterAttach(msg);
-    this._applyTooltips();
+    this._applyItemAttributes();
   }
 
-  private _applyTooltips(): void {
+  private _applyItemAttributes(): void {
     const items = this.items;
 
     this.node
@@ -27,9 +27,20 @@ export class TooltipMenuSvg extends MenuSvg {
           return;
         }
 
-        const tooltip = (item.args as any)?.tooltip as string | undefined;
+        const args = item.args as any;
+        const tooltip = args?.tooltip as string | undefined;
         if (tooltip) {
           li.setAttribute('title', tooltip);
+        }
+
+        const checked = args?.checked as boolean | undefined;
+        const iconNode = li.querySelector('.lm-Menu-itemShortcut');
+        if (iconNode) {
+          if (checked) {
+            iconNode.innerHTML = checkIcon.svgstr;
+          } else {
+            iconNode.innerHTML = '';
+          }
         }
       });
   }

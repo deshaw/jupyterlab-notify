@@ -119,12 +119,14 @@ export async function openNotebookMetadata(
   page: IJupyterLabPageFixture,
 ): Promise<any> {
   await page.sidebar.open('right');
-  
+
   // Click on ADVANCED TOOLS to expand it if collapsed
-  const advancedTools = page.locator('.jp-Collapse-header').filter({ hasText: 'ADVANCED TOOLS' });
+  const advancedTools = page
+    .locator('.jp-Collapse-header')
+    .filter({ hasText: 'ADVANCED TOOLS' });
   const classList = await advancedTools.getAttribute('class');
   const isCollapsed = classList?.includes('jp-Collapse-header-collapsed');
-  
+
   if (isCollapsed) {
     await advancedTools.click();
   }
@@ -147,18 +149,21 @@ export async function setNotebookDefaultThreshold(
 ): Promise<void> {
   const toolbar = await page.notebook.getToolbarLocator();
   expect(toolbar).not.toBeNull();
-  const thresholdButton = toolbar!
-    .locator('[data-jp-item-name="setNotebookDefaultThreshold"]');
+  const thresholdButton = toolbar!.locator(
+    '[data-jp-item-name="setNotebookDefaultThreshold"]',
+  );
   await thresholdButton.click();
 
   const dialog = page.locator('.jp-Dialog');
   await expect(dialog).toBeVisible();
 
-  const input = dialog.locator('input[type="text"], input[type="number"]').first();
+  const input = dialog
+    .locator('input[type="text"], input[type="number"]')
+    .first();
   await input.fill(value);
 
   const unitSelect = dialog.locator('select');
-  if (await unitSelect.count() > 0) {
+  if ((await unitSelect.count()) > 0) {
     await unitSelect.first().selectOption({ value: unit });
   }
 
@@ -190,17 +195,20 @@ export async function setNotebookCustomTimeout(
 ): Promise<void> {
   const toolbar = await page.notebook.getToolbarLocator();
   expect(toolbar).not.toBeNull();
-  const timeoutButton = toolbar!
-    .locator('[data-jp-item-name="setNotebookCustomTimeout"]');
+  const timeoutButton = toolbar!.locator(
+    '[data-jp-item-name="setNotebookCustomTimeout"]',
+  );
   await timeoutButton.click();
   const dialog = page.locator('.jp-Dialog');
   await expect(dialog).toBeVisible();
 
-  const input = dialog.locator('input[type="text"], input[type="number"]').first();
+  const input = dialog
+    .locator('input[type="text"], input[type="number"]')
+    .first();
   await input.fill(value);
 
   const unitSelect = dialog.locator('select');
-  if (await unitSelect.count() > 0) {
+  if ((await unitSelect.count()) > 0) {
     await unitSelect.first().selectOption({ value: unit });
   }
 
@@ -226,8 +234,7 @@ export async function setNotebookNotifyType(
 ): Promise<void> {
   const toolbar = await page.notebook.getToolbarLocator();
   expect(toolbar).not.toBeNull();
-  const notifyTypeButton = toolbar!
-    .locator('[data-jp-item-name="notifyType"]');
+  const notifyTypeButton = toolbar!.locator('[data-jp-item-name="notifyType"]');
   await notifyTypeButton.click();
 
   const menu = page.locator('.lm-Menu');
@@ -250,12 +257,14 @@ export async function openCellMetadata(
   await page.notebook.enterCellEditingMode(cellIdx);
 
   await page.sidebar.open('right');
-  
+
   // Click on ADVANCED TOOLS to expand it if collapsed
-  const advancedTools = page.locator('.jp-Collapse-header').filter({ hasText: 'ADVANCED TOOLS' });
+  const advancedTools = page
+    .locator('.jp-Collapse-header')
+    .filter({ hasText: 'ADVANCED TOOLS' });
   const classList = await advancedTools.getAttribute('class');
   const isCollapsed = classList?.includes('jp-Collapse-header-collapsed');
-  
+
   if (isCollapsed) {
     await advancedTools.click();
   }

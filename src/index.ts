@@ -45,7 +45,7 @@ import {
   IExecutionTimingMetadata,
   IMode,
   INotifySettings,
-  ICellMetadata,
+  INotifyMetadata,
   IInitialResponse,
   INotifyPayload,
   ICellNotification,
@@ -437,7 +437,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const { notebook, cell } = args;
       const cellMetadata = cell.model.getMetadata(
         NOTIFY_METADATA_KEY,
-      ) as ICellMetadata;
+      ) as INotifyMetadata;
       const mode = cellMetadata?.mode;
       if (!mode || mode === 'never') {
         return;
@@ -655,10 +655,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         // Get existing metadata to preserve thresholds
         const existingMetadata = cell.model.getMetadata(NOTIFY_METADATA_KEY) as
-          | ICellMetadata
+          | INotifyMetadata
           | undefined;
 
-        const metadata: ICellMetadata = { mode: modeId };
+        const metadata: INotifyMetadata = { mode: modeId };
 
         // Preserve existing thresholds from both modes
         if (existingMetadata?.[CELL_DEFAULT_THRESHOLD_KEY]) {
@@ -669,7 +669,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
           metadata[CELL_CUSTOM_TIMEOUT_KEY] =
             existingMetadata[CELL_CUSTOM_TIMEOUT_KEY];
         }
-
         // Override threshold if explicitly provided in args
         if (modeId === 'custom-timeout' || modeId === 'default') {
           const nbModel = current?.model;
@@ -682,7 +681,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 ];
             } else {
               threshold =
-                existingMetadata?.[CELL_CUSTOM_TIMEOUT_KEY] ??
                 nbModel?.getMetadata(NOTIFY_METADATA_KEY)?.[
                   NOTEBOOK_CUSTOM_TIMEOUT_KEY
                 ];
@@ -748,7 +746,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
               const cellModel = cellWidget.model;
               const cellMetadata = cellModel.getMetadata(
                 NOTIFY_METADATA_KEY,
-              ) as ICellMetadata | undefined;
+              ) as INotifyMetadata | undefined;
 
               // Only update cells that have a customTimeout value
               if (cellMetadata?.[CELL_CUSTOM_TIMEOUT_KEY]) {
@@ -809,7 +807,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
               const cellModel = cellWidget.model;
               const cellMetadata = cellModel.getMetadata(
                 NOTIFY_METADATA_KEY,
-              ) as ICellMetadata | undefined;
+              ) as INotifyMetadata | undefined;
 
               // Only update cells that have a defaultThreshold value
               if (cellMetadata?.[CELL_DEFAULT_THRESHOLD_KEY]) {
@@ -869,74 +867,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     cellNotifyMenu.addClass('jp-notify-menu');
     cellNotifyMenu.title.label = trans.__('Cell Notification');
 
-    Object.entries(MODES).forEach(([modeId, mode]) => {
-      if (modeId === 'custom-timeout') {
-        const subMenu = new TooltipMenuSvg({ commands: app.commands });
-        subMenu.title.label = mode.label;
-        subMenu.title.icon = mode.icon;
-        TIMEOUT_OPTIONS.forEach(option => {
-          if (option.value === 'default') {
-            subMenu.addItem({
-              command: CommandIDs.setNotificationMode,
-              // Threshold will be retrieved by the command from notebook's metadata
-              args: {
-                modeId: 'custom-timeout',
-                label: option.label,
-                noIcon: true,
-              },
-            });
-          } else if (option.value === 'custom') {
-            subMenu.addItem({
-              command: CommandIDs.setCustomTimeout,
-            });
-          } else {
-            subMenu.addItem({
-              command: CommandIDs.setNotificationMode,
-              args: {
-                modeId: 'custom-timeout',
-                threshold: option.value,
-                label: option.label,
-                noIcon: true,
-              },
-            });
-          }
-        });
-        cellNotifyMenu.addItem({
-          type: 'submenu',
-          submenu: subMenu,
-          args: {
-            tooltip: mode.info,
-          },
-        });
-      } else if (modeId === 'default') {
-        cellNotifyMenu.addItem({
-          command: CommandIDs.setNotificationMode,
-          args: {
-            modeId,
-            tooltip: mode.info,
-          },
-        });
-      } else {
-        cellNotifyMenu.addItem({
-          command: CommandIDs.setNotificationMode,
-          args: {
-            modeId,
-            tooltip: mode.info,
-          },
-        });
-      }
-    });
-    // Add Settings Shortcut
-    cellNotifyMenu.addItem({
-      type: 'separator',
-    });
-    cellNotifyMenu.addItem({
-      type: 'command',
-      command: CommandIDs.openNotificationSettings,
-      args: {
-        tooltip: 'Open Notification Settings',
-      },
-    });
+    // Menu items will be built dynamically when the menu is opened
 
     // Menu for Notebook Notification modes
     const nbNotifyMenu = new TooltipMenuSvg({ commands: app.commands });
@@ -948,7 +879,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Helper function to update the cell toolbar button on metadata change
     function updateCellToolbarButton(button: ToolbarButton, cell: ICellModel) {
       const metadata = cell.getMetadata(NOTIFY_METADATA_KEY) as
-        | ICellMetadata
+        | INotifyMetadata
         | undefined;
       const modeId = metadata?.mode ?? notifySettings.defaultMode;
       const newIcon = MODES[modeId].icon;
@@ -1001,7 +932,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       notebook: INotebookModel,
     ) {
       const metadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
-        | ICellMetadata
+        | INotifyMetadata
         | undefined;
       const modeId = metadata?.mode ?? notifySettings.defaultMode;
       const newIcon = MODES[modeId].icon;
@@ -1038,7 +969,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           }
 
           const metadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
-            | ICellMetadata
+            | INotifyMetadata
             | undefined;
           const modeId = metadata?.mode ?? notifySettings.defaultMode;
           const icon = MODES[modeId].icon;
@@ -1055,14 +986,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 nbNotifyMenu.close();
               } else {
                 // Update menu items with current notebook's threshold values
-                const nbMetadata = notebook.getMetadata(
-                  NOTIFY_METADATA_KEY,
-                ) as any;
+                const nbMetadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
+                  | INotifyMetadata
+                  | undefined;
                 const defaultThreshold =
                   nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
                 const customThreshold =
                   nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY];
-
                 // Clear and rebuild menu with current values
                 nbNotifyMenu.clearItems();
                 Object.entries(MODES).forEach(([modeId, mode]) => {
@@ -1076,6 +1006,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
                         modeId,
                         label,
                         tooltip: mode.info,
+                        checked: nbMetadata
+                          ? modeId === nbMetadata?.mode
+                          : false,
                       },
                     });
                   } else if (modeId === 'default') {
@@ -1088,6 +1021,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
                         modeId,
                         label,
                         tooltip: mode.info,
+                        checked: nbMetadata
+                          ? modeId === nbMetadata?.mode
+                          : false,
                       },
                     });
                   } else {
@@ -1096,6 +1032,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
                       args: {
                         modeId,
                         tooltip: mode.info,
+                        checked: nbMetadata
+                          ? modeId === nbMetadata?.mode
+                          : false,
                       },
                     });
                   }
@@ -1144,7 +1083,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cell = args.model;
 
         const metadata = cell.getMetadata(NOTIFY_METADATA_KEY) as
-          | ICellMetadata
+          | INotifyMetadata
           | undefined;
         const modeId = metadata?.mode ?? notifySettings.defaultMode; // Fallback to default if metadata is unset
         let tooltip = MODES[modeId].label;
@@ -1179,9 +1118,122 @@ const plugin: JupyterFrontEndPlugin<void> = {
           icon: MODES[modeId].icon, // Set initial icon based on current metadata
           onClick: () => {
             if (cellNotifyMenu.isVisible) {
-              //TODO: fix closing
               cellNotifyMenu.close();
             } else {
+              const currentWidget = tracker.currentWidget;
+              if (!currentWidget || !currentWidget.content.activeCell) {
+                return;
+              }
+
+              const activeCell = currentWidget.content.activeCell.model;
+              const cellMetadata = activeCell.getMetadata(
+                NOTIFY_METADATA_KEY,
+              ) as INotifyMetadata | undefined;
+              const nbMetadata = currentWidget.model?.getMetadata(
+                NOTIFY_METADATA_KEY,
+              ) as INotifyMetadata | undefined;
+
+              const cellDefaultThreshold =
+                cellMetadata?.[CELL_DEFAULT_THRESHOLD_KEY];
+              const cellCustomTimeout = cellMetadata?.[CELL_CUSTOM_TIMEOUT_KEY];
+              const nbDefaultThreshold =
+                nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
+              const nbCustomTimeout = nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY];
+
+              // Clear and rebuild menu with current values
+              cellNotifyMenu.clearItems();
+
+              Object.entries(MODES).forEach(([modeId, mode]) => {
+                if (modeId === 'custom-timeout') {
+                  const subMenu = new TooltipMenuSvg({
+                    commands: app.commands,
+                  });
+                  subMenu.title.icon = mode.icon;
+                  TIMEOUT_OPTIONS.forEach(option => {
+                    if (option.value === 'default') {
+                      const label = `${option.label} (${nbCustomTimeout})`;
+                      subMenu.addItem({
+                        command: CommandIDs.setNotificationMode,
+                        args: {
+                          modeId: 'custom-timeout',
+                          label,
+                          noIcon: true,
+                        },
+                      });
+                    } else if (option.value === 'custom') {
+                      subMenu.addItem({
+                        command: CommandIDs.setCustomTimeout,
+                      });
+                    } else {
+                      subMenu.addItem({
+                        command: CommandIDs.setNotificationMode,
+                        args: {
+                          modeId: 'custom-timeout',
+                          threshold: option.value,
+                          label: option.label,
+                          noIcon: true,
+                        },
+                      });
+                    }
+                  });
+                  const displayTimeout = cellCustomTimeout || nbCustomTimeout;
+                  const label = displayTimeout
+                    ? `${mode.label} (${displayTimeout})`
+                    : mode.label;
+                  subMenu.title.label = label;
+                  cellNotifyMenu.addItem({
+                    type: 'submenu',
+                    submenu: subMenu,
+                    args: {
+                      tooltip: mode.info,
+                      checked: cellMetadata
+                        ? modeId === cellMetadata?.mode
+                        : false,
+                    },
+                  });
+                } else if (modeId === 'default') {
+                  const displayThreshold =
+                    cellDefaultThreshold || nbDefaultThreshold;
+                  const label = displayThreshold
+                    ? `${mode.label} (${displayThreshold})`
+                    : mode.label;
+                  cellNotifyMenu.addItem({
+                    command: CommandIDs.setNotificationMode,
+                    args: {
+                      modeId,
+                      label,
+                      tooltip: mode.info,
+                      checked: cellMetadata
+                        ? modeId === cellMetadata?.mode
+                        : false,
+                    },
+                  });
+                } else {
+                  cellNotifyMenu.addItem({
+                    command: CommandIDs.setNotificationMode,
+                    args: {
+                      modeId,
+                      tooltip: mode.info,
+                      checked: cellMetadata
+                        ? modeId === cellMetadata?.mode
+                        : false,
+                    },
+                  });
+                }
+              });
+
+              // Add Settings Shortcut
+              cellNotifyMenu.addItem({
+                type: 'separator',
+              });
+              cellNotifyMenu.addItem({
+                type: 'command',
+                command: CommandIDs.openNotificationSettings,
+                args: {
+                  tooltip: 'Open Notification Settings',
+                },
+              });
+
               const rect = button.node.getBoundingClientRect();
               cellNotifyMenu.open(rect.right, rect.bottom, {
                 horizontalAlignment: 'right',

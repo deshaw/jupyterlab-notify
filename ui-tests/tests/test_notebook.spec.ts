@@ -9,7 +9,6 @@ import {
   selectCellNotificationMode,
 } from './helpers';
 
-
 test('New Notebook metadata contains all required notify properties', async ({
   page,
 }) => {
