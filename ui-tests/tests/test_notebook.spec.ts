@@ -156,11 +156,11 @@ test('New cells inherit notebook notifyType setting', async ({ page }) => {
   const notebookMetadata = await openNotebookMetadata(page);
   await page.waitForTimeout(10000);
   await expect(notebookMetadata).toContainText('"mode": "never"');
-
+  await page.sidebar.close('right');
   await page.notebook.addCell('code', '# New cell');
 
   const cellMetadata = await openCellMetadata(page, 1);
-  await expect(cellMetadata).toContainText('jupyterlab_notify');
+  await expect(cellMetadata).toContainText('"mode": "never"');
 });
 
 test('Multiple sequential timeout changes update correctly', async ({
