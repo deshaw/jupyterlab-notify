@@ -2,7 +2,7 @@ import json
 import logging
 import threading
 from http import HTTPStatus
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional
 
 import tornado.web
 from jupyter_server.base.handlers import JupyterHandler
@@ -88,7 +88,7 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
         self.set_status(HTTPStatus.OK)
         self.finish({"accepted": True})
 
-    def _parse_request_body(self, body: bytes) -> tuple[NotificationParams | None, str]:
+    def _parse_request_body(self, body: bytes) -> tuple[Optional[NotificationParams], str]:
         """
         Parse the JSON body and validate it against NotificationParams.
 
@@ -136,7 +136,7 @@ class NotifyTriggerHandler(ExtensionHandlerMixin, JupyterHandler):
         self.set_status(HTTPStatus.OK)
         self.finish({"done": True})
 
-    def _parse_request_body(self, body: bytes) -> tuple[NotificationParams | None, str]:
+    def _parse_request_body(self, body: bytes) -> tuple[Optional[NotificationParams], str]:
         """
         Parse and validate the JSON body for notification trigger.
 
