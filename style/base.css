@@ -1,3 +1,15 @@
+:root {
+  --jp-notify-highlight-color: #fff3cd;
+}
+
+[data-jp-theme-light='false'] {
+  --jp-notify-highlight-color: #464621;
+}
+
+.jp-notify-highlight {
+  background-color: var(--jp-notify-highlight-color) !important;
+}
+
 /* Cell Toolbar menu to select the Notification mode */
 .jp-notify-menu {
   display: flex;
@@ -66,4 +78,8 @@
 
 .jp-notify-checkbox-input {
   margin: 0;
+}
+
+.jp-notify-check-icon {
+  vertical-align: middle;
 }

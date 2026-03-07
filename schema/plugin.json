@@ -8,16 +8,6 @@
       {
         "name": "notifyType",
         "rank": 80
-      },
-      {
-        "name": "setNotebookCustomTimeout",
-        "command": "notify:set-notebook-custom-timeout",
-        "rank": 901
-      },
-      {
-        "name": "setNotebookDefaultThreshold",
-        "command": "notify:set-notebook-default-threshold",
-        "rank": 902
       }
     ],
     "Cell": [
