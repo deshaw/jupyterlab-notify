@@ -2,6 +2,7 @@ import { INotebookTracker, NotebookPanel } from '@jupyterlab/notebook';
 import { IRenderMime } from '@jupyterlab/rendermime-interfaces';
 import { ILabShell } from '@jupyterlab/application';
 import { JSONObject } from '@lumino/coreutils';
+import type { Cell, ICellModel } from '@jupyterlab/cells';
 
 import { Widget } from '@lumino/widgets';
 
@@ -124,15 +125,10 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
       if (!targetNotebook) {
         return;
       }
-
-      // Switch to the target notebook if it's not current
-      if (this._notebookTracker.currentWidget?.id !== targetNotebook.id) {
-        targetNotebook.activate();
-        this._shell.activateById(targetNotebook.id);
-        // Ensure notebook is fully activated
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-
+      targetNotebook.activate();
+      this._shell.activateById(targetNotebook.id);
+      // Ensure notebook is fully activated
+      await new Promise(resolve => setTimeout(resolve, 100));
       this.navigateToCellInNotebook(targetNotebook, cellId);
     } catch (error) {
       // Silently ignore errors
@@ -150,25 +146,22 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
     return found;
   }
 
-  private navigateToCellInNotebook(notebook: any, cellId: string): boolean {
+  private navigateToCellInNotebook(
+    notebook: NotebookPanel,
+    cellId: string,
+  ): boolean {
     const cells = notebook.content.widgets;
-    const cellIndex = cells.findIndex((cell: any) => cell.model.id === cellId);
+    const cellIndex = cells.findIndex(
+      (cell: Cell<ICellModel>) => cell.model.id === cellId,
+    );
 
     if (cellIndex >= 0) {
       notebook.content.activeCellIndex = cellIndex;
 
       const targetCell = cells[cellIndex];
 
-      requestAnimationFrame(() => {
-        targetCell.node.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-          inline: 'nearest',
-        });
-
-        // Add brief highlight effect
-        this.highlightCell(targetCell);
-      });
+      notebook.content.scrollToCell(targetCell);
+      this.highlightCell(targetCell);
 
       return true;
     }
@@ -176,20 +169,17 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
     return false;
   }
 
-  private highlightCell(cell: any): void {
+  private highlightCell(cell: Cell<ICellModel>): void {
     const cellNode = cell.node;
-    const originalBackground = cellNode.style.backgroundColor;
-    const originalTransition = cellNode.style.transition;
 
-    // Add highlight with animation
-    cellNode.style.transition = 'background-color 0.3s ease';
-    cellNode.style.backgroundColor = '#fff3cd';
+    // Add highlight with animation using CSS class
+    cellNode.classList.add('jp-notify-highlight');
+    cellNode.style.transition = 'background-color 0.5s ease';
 
     setTimeout(() => {
-      cellNode.style.backgroundColor = originalBackground;
-
+      cellNode.classList.remove('jp-notify-highlight');
       setTimeout(() => {
-        cellNode.style.transition = originalTransition;
+        cellNode.style.transition = '';
       }, 300);
     }, 1000);
   }

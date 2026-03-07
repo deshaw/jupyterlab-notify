@@ -279,7 +279,7 @@ export interface ITimeoutPromptOptions {
 export function getThresholdValue(
   mode: ModeId,
   cellMetadata: INotifyMetadata | undefined,
-  notebookMetadata: Record<string, any> | undefined,
+  notebookMetadata: Record<string, string> | undefined,
   settingsDefaultThreshold: number | null,
   settingsCustomTimeout: number | null,
 ): string | number | null {

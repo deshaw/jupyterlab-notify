@@ -895,7 +895,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (!threshold) {
         const nbMetadata = tracker.currentWidget?.model?.getMetadata(
           NOTIFY_METADATA_KEY,
-        ) as Record<string, any> | undefined;
+        ) as Record<string, string> | undefined;
 
         threshold =
           modeId === 'default'
@@ -1096,7 +1096,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (!threshold) {
           const nbMetadata = tracker.currentWidget?.model?.getMetadata(
             NOTIFY_METADATA_KEY,
-          ) as Record<string, any> | undefined;
+          ) as Record<string, string> | undefined;
 
           threshold =
             modeId === 'default'

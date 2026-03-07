@@ -27,7 +27,7 @@ export class TooltipMenuSvg extends MenuSvg {
           return;
         }
 
-        const args = item.args as any;
+        const args = item.args as Record<string, unknown> | undefined;
         const tooltip = args?.tooltip as string | undefined;
         if (tooltip) {
           li.setAttribute('title', tooltip);
@@ -38,6 +38,9 @@ export class TooltipMenuSvg extends MenuSvg {
         if (iconNode) {
           if (checked) {
             iconNode.innerHTML = checkIcon.svgstr;
+            (iconNode.childNodes[0] as Element).classList.add(
+              'jp-notify-check-icon',
+            );
           } else {
             iconNode.innerHTML = '';
           }
