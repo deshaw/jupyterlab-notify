@@ -135,7 +135,7 @@ export async function openNotebookMetadata(
 }
 
 /**
- * Helper function to interact with the Set Default Threshold toolbar button
+ * Helper function to interact with the Set Default Threshold menu option
  * Opens a dialog and can set a value with optional "Apply to all cells" checkbox
  * @param value - Threshold value to set
  * @param unit - Time unit (seconds, minutes, hours)
@@ -149,10 +149,13 @@ export async function setNotebookDefaultThreshold(
 ): Promise<void> {
   const toolbar = await page.notebook.getToolbarLocator();
   expect(toolbar).not.toBeNull();
-  const thresholdButton = toolbar!.locator(
-    '[data-jp-item-name="setNotebookDefaultThreshold"]',
-  );
-  await thresholdButton.click();
+  const notifyTypeButton = toolbar!.locator('[data-jp-item-name="notifyType"]');
+  await notifyTypeButton.click();
+
+  const menu = page.locator('.lm-Menu');
+  await expect(menu).toBeVisible();
+
+  await menu.locator(`.lm-Menu-item:has-text("Set Default Threshold")`).click();
 
   const dialog = page.locator('.jp-Dialog');
   await expect(dialog).toBeVisible();
@@ -181,7 +184,7 @@ export async function setNotebookDefaultThreshold(
 }
 
 /**
- * Helper function to interact with the Set Custom Timeout toolbar button
+ * Helper function to interact with the Set Custom Timeout menu option
  * Opens a dialog and can set a value with optional "Apply to all cells" checkbox
  * @param value - Timeout value to set
  * @param unit - Time unit (seconds, minutes, hours)
@@ -195,10 +198,14 @@ export async function setNotebookCustomTimeout(
 ): Promise<void> {
   const toolbar = await page.notebook.getToolbarLocator();
   expect(toolbar).not.toBeNull();
-  const timeoutButton = toolbar!.locator(
-    '[data-jp-item-name="setNotebookCustomTimeout"]',
-  );
-  await timeoutButton.click();
+  const notifyTypeButton = toolbar!.locator('[data-jp-item-name="notifyType"]');
+  await notifyTypeButton.click();
+
+  const menu = page.locator('.lm-Menu');
+  await expect(menu).toBeVisible();
+
+  await menu.locator(`.lm-Menu-item:has-text("Set Custom Timeout")`).click();
+
   const dialog = page.locator('.jp-Dialog');
   await expect(dialog).toBeVisible();
 
