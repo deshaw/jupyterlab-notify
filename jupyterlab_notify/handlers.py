@@ -77,7 +77,7 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
         )
 
         # If a timeout threshold is configured, schedule a timer to trigger notification.
-        if params.mode in ("custom-timeout"):
+        if params.mode == "custom-timeout":
             timer = threading.Timer(
                 params.threshold, self.extension_app.send_notification, args=(params,)
             )

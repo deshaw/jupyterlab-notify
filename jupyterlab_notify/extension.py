@@ -202,7 +202,6 @@ class NotifyExtension(ExtensionApp):
 
         # Build formatted message with status, cell info, and details
         cell_info = f"Cell: {params.execution_count}" if params.execution_count is not None else f"Cell id: {params.cell_id}"
-        print(f"\nParams: {params}")
         message_parts = []
         if params.notebook_name:
             message_parts.append(params.notebook_name)
