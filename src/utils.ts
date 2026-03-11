@@ -21,6 +21,7 @@ import {
   ModeId,
 } from './token';
 import { ITranslator, nullTranslator } from '@jupyterlab/translation';
+import { KernelError } from '@jupyterlab/notebook';
 /**
  * Custom Time Input Dialog class
  */
@@ -158,15 +159,24 @@ export const generateNotificationData = (
   notebookName: string,
   notebookId: string,
   executionCount: number | null,
+  kernelError: KernelError | null = null,
 ): INotificationData => ({
   type: 'NOTIFY',
   payload: {
     title: buildNotificationTitle(notebookName, message),
-    body: typeof executionCount === 'number' ? `Cell: ${executionCount}` : '',
+    body: [
+      typeof executionCount === 'number' ? `Cell: ${executionCount}` : null,
+      kernelError
+        ? `Error: ${kernelError.errorName}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join('\n'),
     cellId: cell_id,
     notebookName: stripNotebookExtension(notebookName),
     notebookId,
     ...(typeof executionCount === 'number' ? { executionCount } : {}),
+    ...(kernelError ? { kernelError } : {}),
   },
   isProcessed: false,
   id: `notify-${Math.random().toString(36).substring(2)}`,

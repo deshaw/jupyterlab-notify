@@ -1,3 +1,4 @@
+import { KernelError } from '@jupyterlab/notebook';
 import { LabIcon } from '@jupyterlab/ui-components';
 
 /**
@@ -87,6 +88,7 @@ export interface INotificationData {
     notebookName: string;
     executionCount?: number;
     notebookId: string;
+    kernelError?: KernelError;
   };
   isProcessed: boolean;
   id: string;

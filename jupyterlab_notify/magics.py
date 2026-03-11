@@ -75,7 +75,7 @@ class NotifyCellCompletionMagics(Magics):
     def __init__(self, shell):
         super(NotifyCellCompletionMagics, self).__init__(shell)
         self.smtp_instance = None
-        # self._setup_smtp_instance()
+        self._setup_smtp_instance()
         display(_Notification(_NotificationType.INIT))
 
     def _setup_smtp_instance(self):

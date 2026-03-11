@@ -22,7 +22,12 @@
       "title": "Default mode",
       "description": "The default mode for notification",
       "type": "string",
-      "enum": ["default", "never", "on-error", "custom-timeout"],
+      "oneOf": [
+        { "const": "default", "title": "Default" },
+        { "const": "never", "title": "Never" },
+        { "const": "on-error", "title": "On Error" },
+        { "const": "custom-timeout", "title": "Custom timeout" }
+      ],
       "default": "default"
     },
     "defaultThreshold": {
@@ -34,7 +39,7 @@
     },
     "customTimeout": {
       "title": "Timeout value for timeout notifications",
-      "description": "Default timeout value for custom-timeout notification (unit in seconds)",
+      "description": "Default timeout value for custom timeout notification (unit in seconds)",
       "type": ["number", "null"],
       "default": 30,
       "minimum": 0

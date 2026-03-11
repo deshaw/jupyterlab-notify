@@ -83,7 +83,7 @@ const MODES: Record<ModeId, IMode & { info: string }> = {
     info: 'Never send notifications for this cell.',
   },
   'on-error': {
-    label: 'On error',
+    label: 'On Error',
     icon: bellAlertIcon,
     info: 'Notify only if cell execution fails.',
   },
@@ -354,6 +354,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (payload.mode === 'default') {
         const timingData: IExecutionTimingMetadata =
           cell.getMetadata('execution');
+        if (!timingData) {
+          console.warn("Skipping notification: Missing execution timing data for cell", cellId);
+          return;
+        }
         const startTime = timingData['shell.execute_reply.started'];
         const endTime =
           timingData['shell.execute_reply'] ?? timingData['execution_failed'];
@@ -390,6 +394,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         payload.notebook_name,
         payload.notebookId,
         typeof executionCount === 'number' ? executionCount : null,
+        kernelError,
       );
 
       if (!config.nbmodel_installed) {
