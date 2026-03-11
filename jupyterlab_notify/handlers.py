@@ -88,7 +88,9 @@ class NotifyHandler(ExtensionHandlerMixin, JupyterHandler):
         self.set_status(HTTPStatus.OK)
         self.finish({"accepted": True})
 
-    def _parse_request_body(self, body: bytes) -> tuple[Optional[NotificationParams], str]:
+    def _parse_request_body(
+        self, body: bytes
+    ) -> tuple[Optional[NotificationParams], str]:
         """
         Parse the JSON body and validate it against NotificationParams.
 
@@ -136,7 +138,9 @@ class NotifyTriggerHandler(ExtensionHandlerMixin, JupyterHandler):
         self.set_status(HTTPStatus.OK)
         self.finish({"done": True})
 
-    def _parse_request_body(self, body: bytes) -> tuple[Optional[NotificationParams], str]:
+    def _parse_request_body(
+        self, body: bytes
+    ) -> tuple[Optional[NotificationParams], str]:
         """
         Parse and validate the JSON body for notification trigger.
 
