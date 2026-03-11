@@ -355,7 +355,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const timingData: IExecutionTimingMetadata =
           cell.getMetadata('execution');
         if (!timingData) {
-          console.warn("Skipping notification: Missing execution timing data for cell", cellId);
+          console.warn(
+            'Skipping notification: Missing execution timing data for cell',
+            cellId,
+          );
           return;
         }
         const startTime = timingData['shell.execute_reply.started'];

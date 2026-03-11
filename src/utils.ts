@@ -166,9 +166,7 @@ export const generateNotificationData = (
     title: buildNotificationTitle(notebookName, message),
     body: [
       typeof executionCount === 'number' ? `Cell: ${executionCount}` : null,
-      kernelError
-        ? `Error: ${kernelError.errorName}`
-        : null,
+      kernelError ? `Error: ${kernelError.errorName}` : null,
     ]
       .filter(Boolean)
       .join('\n'),
