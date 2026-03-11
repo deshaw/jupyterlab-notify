@@ -5,6 +5,7 @@ import { LabIcon } from '@jupyterlab/ui-components';
  * Execution timing metadata from cell execution
  */
 export interface IExecutionTimingMetadata {
+  'iopub.execute_input': string;
   'shell.execute_reply.started': string;
   'shell.execute_reply': string;
   execution_failed: string;

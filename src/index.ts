@@ -392,10 +392,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const executionCount = (cell as ICodeCellModel).executionCount;
 
       const notificationData = generateNotificationData(
+        state,
         message,
         cellId,
         payload.notebook_name,
         payload.notebookId,
+        cell.getMetadata('execution') as IExecutionTimingMetadata | null,
         typeof executionCount === 'number' ? executionCount : null,
         kernelError,
       );

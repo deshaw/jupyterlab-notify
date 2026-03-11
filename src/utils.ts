@@ -19,6 +19,8 @@ import {
   NOTEBOOK_DEFAULT_THRESHOLD_KEY,
   NOTEBOOK_CUSTOM_TIMEOUT_KEY,
   ModeId,
+  IExecutionTimingMetadata,
+  NotifyType,
 } from './token';
 import { ITranslator, nullTranslator } from '@jupyterlab/translation';
 import { KernelError } from '@jupyterlab/notebook';
@@ -132,53 +134,87 @@ export const stripNotebookExtension = (pathOrName: string): string => {
 };
 
 /**
- * Builds a notification title with the notebook name prefix
- * @param notebookName - The name of the notebook
- * @param message - The notification message
- * @returns The formatted title
+ * Generates notification body for desktop alerts
  */
-export const buildNotificationTitle = (
-  notebookName: string,
-  message: string,
+const _buildNotificationBody = (
+  state: NotifyType,
+  timingInfo: IExecutionTimingMetadata | null,
+  executionCount: number | null,
+  kernelError: KernelError | null,
 ): string => {
-  return `[${stripNotebookExtension(notebookName)}] ${message}`;
+  const parts: string[] = [];
+
+  if (kernelError) {
+    const errorMessage = kernelError.errorValue
+      ? kernelError.errorValue.length > 50
+        ? kernelError.errorValue.substring(0, 50) + '...'
+        : kernelError.errorValue
+      : '';
+    const cellPrefix =
+      typeof executionCount === 'number' ? `Cell [${executionCount}]: ` : '';
+    parts.push(
+      `${cellPrefix}${kernelError.errorName}${
+        errorMessage ? ': ' + errorMessage : ''
+      }`,
+    );
+  } else if (timingInfo) {
+    const startTime =
+      state === 'timeout'
+        ? timingInfo['iopub.execute_input']
+        : timingInfo['shell.execute_reply.started'];
+    const endTime =
+      state === 'timeout'
+        ? new Date().toISOString()
+        : timingInfo['shell.execute_reply'];
+
+    if (typeof startTime === 'string' && typeof endTime === 'string') {
+      const durationSeconds = (
+        (new Date(endTime).getTime() - new Date(startTime).getTime()) /
+        1000
+      ).toFixed(1);
+      const cellPrefix =
+        typeof executionCount === 'number' ? `Cell [${executionCount}]: ` : '';
+      const action = state === 'timeout' ? 'Timed out after' : 'Completed in';
+      const unit = durationSeconds === '1.0' ? 'second' : 'seconds';
+      parts.push(`${cellPrefix}${action} ${durationSeconds} ${unit}`);
+    }
+  } else if (executionCount !== null) {
+    parts.push(`Cell [${executionCount}]`);
+  }
+
+  return parts.join('\n');
 };
 
-/**
- * Generates notification data for desktop alerts
- * @param message - The notification message
- * @param cell_id - The cell ID
- * @param notebookName - The notebook name
- * @param notebookId - The notebook ID
- * @param executionCount - The execution count of the cell
- * @returns The notification data object
- */
 export const generateNotificationData = (
+  state: NotifyType,
   message: string,
   cell_id: string,
   notebookName: string,
   notebookId: string,
+  timingInfo: IExecutionTimingMetadata | null,
   executionCount: number | null,
   kernelError: KernelError | null = null,
-): INotificationData => ({
-  type: 'NOTIFY',
-  payload: {
-    title: buildNotificationTitle(notebookName, message),
-    body: [
-      typeof executionCount === 'number' ? `Cell: ${executionCount}` : null,
-      kernelError ? `Error: ${kernelError.errorName}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n'),
-    cellId: cell_id,
-    notebookName: stripNotebookExtension(notebookName),
-    notebookId,
-    ...(typeof executionCount === 'number' ? { executionCount } : {}),
-    ...(kernelError ? { kernelError } : {}),
-  },
-  isProcessed: false,
-  id: `notify-${Math.random().toString(36).substring(2)}`,
-});
+): INotificationData => {
+  return {
+    type: 'NOTIFY',
+    payload: {
+      title: `${stripNotebookExtension(notebookName)}: ${message}`,
+      body: _buildNotificationBody(
+        state,
+        timingInfo,
+        executionCount,
+        kernelError,
+      ),
+      cellId: cell_id,
+      notebookName: stripNotebookExtension(notebookName),
+      notebookId,
+      ...(typeof executionCount === 'number' ? { executionCount } : {}),
+      ...(kernelError ? { kernelError } : {}),
+    },
+    isProcessed: false,
+    id: `notify-${Math.random().toString(36).substring(2)}`,
+  };
+};
 
 /**
  * Displays configuration warning for unconfigured services
