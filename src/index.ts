@@ -90,7 +90,7 @@ const MODES: Record<ModeId, IMode & { info: string }> = {
   'custom-timeout': {
     label: 'Custom Timeout',
     icon: bellClockIcon,
-    info: 'Notify after a custom timeout, regardless of execution result.',
+    info: 'Notify if a cell is still running after a set timeout.',
   },
 };
 
