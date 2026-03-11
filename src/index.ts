@@ -140,7 +140,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       // Ensure the recordTiming setting is enabled for the extension to function correctly
       const nbPluginId = '@jupyterlab/notebook-extension:tracker';
       const nbSettings = await settingRegistry.load(nbPluginId);
-      nbSettings.set('recordTiming', true);
+      await nbSettings.set('recordTiming', true);
 
       // Ensure recordTiming remains true if user tries to change it
       nbSettings.changed.connect(async () => {
@@ -425,12 +425,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Execution listeners
     NotebookActions.executed.connect((_, args) => {
-      handleNotification(
+      void handleNotification(
         args.cell.model,
         args.success,
         false,
         args.error ?? null,
-      );
+      ).catch(err => {
+        console.error('Error handling notification:', err);
+      });
     });
 
     NotebookActions.executionScheduled.connect(async (_, args) => {
@@ -590,7 +592,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
         ) {
           notification.timeoutId = setTimeout(() => {
             if (!notification.notificationIssued) {
-              handleNotification(cell.model, true, true);
+              void handleNotification(cell.model, true, true).catch(err => {
+                console.error('Error handling notification:', err);
+              });
             }
           }, timeoutInSeconds * 1000);
         }
