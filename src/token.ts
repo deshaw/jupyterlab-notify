@@ -30,6 +30,7 @@ export interface INotifySettings {
   successMessage: string;
   defaultThreshold: number | null;
   customTimeout: number | null;
+  alwaysNotifyOnError: boolean;
 }
 
 /**

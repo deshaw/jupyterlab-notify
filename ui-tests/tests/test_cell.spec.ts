@@ -128,9 +128,9 @@ test('Notification triggers on cell execution with "default" mode', async ({
   expect(successNotifications.length).toBeGreaterThan(0);
 
   expect(successNotifications[0].title).toBe(
-    '[test] Cell execution completed successfully',
+    'test: Cell execution completed successfully',
   );
-  expect(successNotifications[0].body).toMatch(/Cell: \d+/);
+  expect(successNotifications[0].body).toMatch(/Cell \[\d+\]/);
 
   // Execute a failing cell
   await selectCellNotificationMode(page, 1, 'Default');
@@ -144,7 +144,109 @@ test('Notification triggers on cell execution with "default" mode', async ({
     return window.mockNotifications;
   });
   expect(allNotifications.length).toBeGreaterThan(1);
-  expect(allNotifications[1].title).toBe('[test] Cell execution failed');
+  expect(allNotifications[1].title).toBe('test: Cell execution failed');
+});
+
+test('Error notifications trigger for default mode when alwaysNotifyOnError is enabled', async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    await window.jupyterapp.serviceManager.settings.save(
+      'jupyterlab-notify:plugin',
+      JSON.stringify({
+        defaultThreshold: 1,
+        alwaysNotifyOnError: true,
+      }),
+    );
+  });
+
+  await page.reload();
+
+  await setupNotificationMock(page);
+  await createNewNotebook(page, 'test.ipynb');
+  await page.sidebar.close('left');
+
+  // In default mode, failure should notify even if execution is below threshold.
+  await selectCellNotificationMode(page, 0, 'Default');
+  await page.notebook.enterCellEditingMode(0);
+  await page.keyboard.type('raise Exception("Default mode failure")');
+  await page.notebook.runCell(0);
+  await page.waitForTimeout(500);
+
+  const notifications = await page.evaluate(() => window.mockNotifications);
+  expect(notifications.length).toBe(1);
+  expect(notifications[0].title).toBe('test: Cell execution failed');
+  expect(notifications[0].body).toContain('Default mode failure');
+});
+
+test('Error notifications trigger for custom-timeout mode when alwaysNotifyOnError is enabled', async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    await window.jupyterapp.serviceManager.settings.save(
+      'jupyterlab-notify:plugin',
+      JSON.stringify({
+        defaultThreshold: 1,
+        alwaysNotifyOnError: true,
+      }),
+    );
+  });
+
+  await page.reload();
+
+  await setupNotificationMock(page);
+  await createNewNotebook(page, 'test.ipynb');
+  await page.sidebar.close('left');
+
+  // In custom-timeout mode, failure should notify immediately.
+  await selectCellNotificationMode(page, 0, 'Custom Timeout', '1 min');
+  await page.notebook.enterCellEditingMode(0);
+  await page.keyboard.type('raise Exception("Custom-timeout mode failure")');
+  await page.notebook.runCell(0);
+  await page.waitForTimeout(500);
+
+  const notifications = await page.evaluate(() => window.mockNotifications);
+  expect(notifications.length).toBe(1);
+  expect(notifications[0].title).toBe('test: Cell execution failed');
+  expect(notifications[0].body).toContain('Custom-timeout mode failure');
+});
+
+test('Error notifications do not trigger for default and custom-timeout when alwaysNotifyOnError is disabled', async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    await window.jupyterapp.serviceManager.settings.save(
+      'jupyterlab-notify:plugin',
+      JSON.stringify({
+        defaultThreshold: 1,
+        alwaysNotifyOnError: false,
+      }),
+    );
+  });
+
+  await page.reload();
+
+  await setupNotificationMock(page);
+  await createNewNotebook(page, 'test.ipynb');
+  await page.sidebar.close('left');
+
+  await selectCellNotificationMode(page, 0, 'Default');
+  await page.notebook.enterCellEditingMode(0);
+  await page.keyboard.type('raise Exception("Default mode failure")');
+  await page.notebook.runCell(0);
+  await page.waitForTimeout(500);
+
+  let notifications = await page.evaluate(() => window.mockNotifications);
+  expect(notifications.length).toBe(0);
+
+  await selectCellNotificationMode(page, 1, 'Custom Timeout', '1 min');
+  await page.notebook.enterCellEditingMode(1);
+  await page.keyboard.type('raise Exception("Custom-timeout mode failure")');
+  await page.notebook.runCell(1);
+  await page.waitForTimeout(500);
+
+  notifications = await page.evaluate(() => window.mockNotifications);
+  expect(notifications.length).toBe(0);
 });
 
 test('Notification triggers only on error with "on-error" mode', async ({
@@ -180,7 +282,7 @@ test('Notification triggers only on error with "on-error" mode', async ({
     () => window.mockNotifications,
   );
   expect(errorNotifications.length).toBe(1);
-  expect(errorNotifications[0].title).toBe('[test] Cell execution failed');
+  expect(errorNotifications[0].title).toBe('test: Cell execution failed');
 });
 
 test('Notification triggers on kernel death on "on-error" mode', async ({
@@ -207,7 +309,7 @@ test('Notification triggers on kernel death on "on-error" mode', async ({
     () => window.mockNotifications,
   );
   expect(errorNotifications.length).toBe(1);
-  expect(errorNotifications[0].title).toBe('[test] Cell execution failed');
+  expect(errorNotifications[0].title).toBe('test: Cell execution failed');
 
   // Don't wait for the promise since kernel was killed
   runCellPromise.catch(() => {});
@@ -240,7 +342,7 @@ test('Notification triggers only on timeout with "custom-timeout" mode', async (
   // Verify timeout notification
   const notifications = await page.evaluate(() => window.mockNotifications);
   expect(notifications.length).toBeGreaterThan(0);
-  expect(notifications[0].title).toBe('[test] Cell execution timeout reached');
+  expect(notifications[0].title).toBe('test: Cell execution timeout reached');
 });
 
 test('Notification does not trigger on execution completion with "custom-timeout" mode', async ({

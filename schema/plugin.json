@@ -69,6 +69,12 @@
       "type": "boolean",
       "default": false,
       "disabled": true
+    },
+    "alwaysNotifyOnError": {
+      "title": "Always notify on error",
+      "description": "If enabled, any cell configured with a notification mode other than \"never\" will always trigger a notification when execution fails.",
+      "type": "boolean",
+      "default": true
     }
   },
   "additionalProperties": false,

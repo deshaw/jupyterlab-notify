@@ -129,6 +129,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       successMessage: 'Cell execution completed successfully',
       defaultThreshold: 30,
       customTimeout: 30,
+      alwaysNotifyOnError: true,
     };
 
     // Settings management
@@ -336,6 +337,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const { payload } = notification;
       payload.execution_count = (cell as ICodeCellModel).executionCount;
 
+      const isExecutionFailure = !success;
+      const shouldNotifyForError =
+        isExecutionFailure &&
+        (payload.mode === 'on-error' || notifySettings.alwaysNotifyOnError);
+
       if (payload.mode === 'on-error' && success && !triggeredViaTimeout) {
         cellNotificationMap.delete(cellId);
         return;
@@ -343,6 +349,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       // Return for custom-timeout if this isn't triggered by timeout or if cell already finished execution
       if (
         payload.mode === 'custom-timeout' &&
+        !shouldNotifyForError &&
         (!triggeredViaTimeout ||
           (cell as ICodeCellModel).executionState !== 'running')
       ) {
@@ -351,7 +358,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       // Handle case when threshold isn't exceeded in default mode
-      if (payload.mode === 'default') {
+      if (payload.mode === 'default' && !shouldNotifyForError) {
         const timingData: IExecutionTimingMetadata =
           cell.getMetadata('execution');
         if (!timingData) {
@@ -378,11 +385,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       // Determine notification type based on execution state
-      const state: NotifyType = triggeredViaTimeout
+      const state: NotifyType = !success
+        ? 'failed'
+        : triggeredViaTimeout
         ? 'timeout'
-        : success
-        ? 'completed'
-        : 'failed';
+        : 'completed';
       const message =
         state === 'timeout'
           ? 'Cell execution timeout reached'
