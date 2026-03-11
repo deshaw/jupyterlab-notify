@@ -179,6 +179,8 @@ test('Error notifications trigger for default mode when alwaysNotifyOnError is e
   expect(notifications[0].body).toContain('Default mode failure');
 });
 
+// Couldn't test both on single test because batch notify waits for 3s after sending one
+// So having 2 tests is faster.
 test('Error notifications trigger for custom-timeout mode when alwaysNotifyOnError is enabled', async ({
   page,
 }) => {
