@@ -257,8 +257,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
         for (const [cellId, notification] of cellNotificationMap.entries()) {
           if (
             notification.notebookId === notebookId &&
-            notification.payload.mode === 'on-error' &&
-            !notification.notificationIssued
+            !notification.notificationIssued &&
+            (notifySettings.alwaysNotifyOnError
+              ? notification.payload.mode !== 'never'
+              : notification.payload.mode === 'on-error')
           ) {
             const cellWidget = notebook.widgets.find(
               w => w.model.id === cellId,
