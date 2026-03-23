@@ -412,11 +412,7 @@ test('Custom-timeout notification does not include cell number before execution'
   await createNewNotebook(page, 'test.ipynb');
   await page.sidebar.close('left');
 
-  await selectCellNotificationMode(
-    page,
-    0,
-    'Never'
-  );
+  await selectCellNotificationMode(page, 0, 'Never');
 
   await page.notebook.enterCellEditingMode(0);
   await page.keyboard.type('import time; time.sleep(2)');
