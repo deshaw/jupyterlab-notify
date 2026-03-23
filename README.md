@@ -182,37 +182,11 @@ pip uninstall jupyterlab_notify
 
 ## Publishing
 
-Before starting, you'll need to have run: `pip install twine jupyter_packaging`
-
 1. Update the version in `package.json` and update the release date in `CHANGELOG.md`
-2. Commit the change in step 1, tag it, then push it
-
-```
-git commit -am <msg>
-git tag vX.Z.Y
-git push && git push --tags
-```
-
-3. Create the artifacts
-
-```
-rm -rf dist
-python setup.py sdist bdist_wheel
-```
-
-4. Test this against the test pypi. You can then install from here to test as well:
-
-```
-twine upload --repository-url https://test.pypi.org/legacy/ dist/*
-# In a new venv
-pip install --index-url https://test.pypi.org/simple/ jupyterlab_notify
-```
-
-5. Upload this to pypi:
-
-```
-twine upload dist/*
-```
+2. Commit the change in step 1
+3. For test release, manually trigger the [`Build and publish to PyPI` workflow](https://github.com/deshaw/jupyterlab-notify/actions/workflows/build.yml) - you need to check the `Test release` checkbox
+4. Draft a new [GitHub release](https://github.com/deshaw/jupyterlab-notify/releases/new), creating an approriate version tag
+5. Publish the draft and verify that the `publish` job in the build workflow passed.
 
 ### Uninstall
 
