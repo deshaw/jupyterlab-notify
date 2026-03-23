@@ -178,6 +178,9 @@ const _buildNotificationBody = (
       const unit = durationSeconds === '1.0' ? 'second' : 'seconds';
       parts.push(`${cellPrefix}${action} ${durationSeconds} ${unit}`);
     }
+  } else if (state === 'timeout' && !timingInfo) {
+    // Cell timed out before starting execution
+    parts.push('Timed out before execution');
   } else if (executionCount !== null) {
     parts.push(`Cell [${executionCount}]`);
   }

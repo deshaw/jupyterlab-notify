@@ -3,6 +3,7 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin,
 } from '@jupyterlab/application';
+import { Kernel, KernelMessage } from '@jupyterlab/services';
 import {
   INotebookModel,
   INotebookTracker,
@@ -197,6 +198,36 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    const cellNotificationMap: Map<string, ICellNotification> = new Map();
+    const msgIdToCellByNotebook: Map<string, Map<string, string>> = new Map();
+
+    const clearTrackedMsgMappingsForCell = (
+      notebookId: string,
+      cellId: string,
+    ): void => {
+      const msgIdMap = msgIdToCellByNotebook.get(notebookId);
+      if (!msgIdMap) {
+        return;
+      }
+
+      for (const [msgId, mappedCellId] of msgIdMap.entries()) {
+        if (mappedCellId === cellId) {
+          msgIdMap.delete(msgId);
+        }
+      }
+      if (msgIdMap.size === 0) {
+        msgIdToCellByNotebook.delete(notebookId);
+      }
+    };
+
+    const cleanupNotificationTracking = (
+      cellId: string,
+      notebookId: string,
+    ): void => {
+      clearTrackedMsgMappingsForCell(notebookId, cellId);
+      cellNotificationMap.delete(cellId);
+    };
+
     // Track new notebooks
     tracker.widgetAdded.connect(async (_, notebookPanel: NotebookPanel) => {
       // Wait for the notebook to be fully ready
@@ -204,6 +235,92 @@ const plugin: JupyterFrontEndPlugin<void> = {
       await notebookPanel.sessionContext.ready;
 
       const notebook = notebookPanel.content;
+      const notebookId = notebook.id;
+      const kernelMessageHooks = {
+        kernel: null as Kernel.IKernelConnection | null,
+        anyMessage: (
+          _: Kernel.IKernelConnection,
+          args: Kernel.IAnyMessageArgs,
+        ) => {
+          if (
+            args.direction !== 'send' ||
+            args.msg.header.msg_type !== 'execute_request'
+          ) {
+            return;
+          }
+
+          const activeCell = notebookPanel.content.activeCell;
+          if (!activeCell || activeCell.model.type !== 'code') {
+            return;
+          }
+
+          const notification = cellNotificationMap.get(activeCell.model.id);
+          if (!notification || notification.payload.mode !== 'custom-timeout') {
+            return;
+          }
+
+          const msgMap = msgIdToCellByNotebook.get(notebookId) ?? new Map();
+          msgMap.set(args.msg.header.msg_id, activeCell.model.id);
+          msgIdToCellByNotebook.set(notebookId, msgMap);
+        },
+        iopubMessage: (
+          _: Kernel.IKernelConnection,
+          msg: KernelMessage.IMessage,
+        ) => {
+          if (!KernelMessage.isExecuteInputMsg(msg)) {
+            return;
+          }
+
+          const msgIdMap = msgIdToCellByNotebook.get(notebookId);
+          if (!msgIdMap) {
+            return;
+          }
+
+          const parentMsgId = msg.parent_header.msg_id;
+          if (!parentMsgId) {
+            return;
+          }
+
+          const cellId = msgIdMap.get(parentMsgId);
+          if (!cellId) {
+            return;
+          }
+
+          const notification = cellNotificationMap.get(cellId);
+          if (notification) {
+            notification.payload.execution_count = msg.content.execution_count;
+          }
+
+          msgIdMap.delete(parentMsgId);
+          if (msgIdMap.size === 0) {
+            msgIdToCellByNotebook.delete(notebookId);
+          }
+        },
+      };
+
+      const connectKernelMessageHooks = (
+        kernel: Kernel.IKernelConnection | null,
+      ): void => {
+        if (kernelMessageHooks.kernel) {
+          kernelMessageHooks.kernel.anyMessage.disconnect(
+            kernelMessageHooks.anyMessage,
+          );
+          kernelMessageHooks.kernel.iopubMessage.disconnect(
+            kernelMessageHooks.iopubMessage,
+          );
+        }
+
+        kernelMessageHooks.kernel = kernel;
+        if (kernel) {
+          kernel.anyMessage.connect(kernelMessageHooks.anyMessage);
+          kernel.iopubMessage.connect(kernelMessageHooks.iopubMessage);
+        }
+      };
+
+      notebookPanel.disposed.connect(() => {
+        connectKernelMessageHooks(null);
+        msgIdToCellByNotebook.delete(notebookId);
+      });
       // Set notebook metadata if not present
       const nbModel = notebook.model;
       if (nbModel && !nbModel.getMetadata(NOTIFY_METADATA_KEY)) {
@@ -293,6 +410,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           kernel.statusChanged.disconnect(onKernelStatusChanged);
           kernel.statusChanged.connect(onKernelStatusChanged);
         }
+        connectKernelMessageHooks(kernel ?? null);
       });
 
       // Connect to initial kernel if it exists
@@ -300,6 +418,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (kernel) {
         kernel.statusChanged.connect(onKernelStatusChanged);
       }
+      connectKernelMessageHooks(kernel ?? null);
     });
 
     // Server configuration
@@ -315,8 +434,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
     } catch (e) {
       console.error('Checking server capability failed:', e);
     }
-
-    const cellNotificationMap: Map<string, ICellNotification> = new Map();
 
     /**
      * Handles notification rendering based on execution status
@@ -337,7 +454,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       const { payload } = notification;
-      payload.execution_count = (cell as ICodeCellModel).executionCount;
+      const liveExecutionCount = (cell as ICodeCellModel).executionCount;
+      if (typeof liveExecutionCount === 'number') {
+        payload.execution_count = liveExecutionCount;
+      }
 
       const isExecutionFailure = !success;
       const shouldNotifyForError =
@@ -345,7 +465,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         (payload.mode === 'on-error' || notifySettings.alwaysNotifyOnError);
 
       if (payload.mode === 'on-error' && success && !triggeredViaTimeout) {
-        cellNotificationMap.delete(cellId);
+        cleanupNotificationTracking(cellId, notification.notebookId);
         return;
       }
       // Return for custom-timeout if this isn't triggered by timeout or if cell already finished execution
@@ -355,7 +475,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         (!triggeredViaTimeout ||
           (cell as ICodeCellModel).executionState !== 'running')
       ) {
-        cellNotificationMap.delete(cellId);
+        cleanupNotificationTracking(cellId, notification.notebookId);
         return;
       }
 
@@ -398,7 +518,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
           : state === 'completed'
           ? notifySettings.successMessage
           : notifySettings.failureMessage;
-      const executionCount = (cell as ICodeCellModel).executionCount;
+      const executionCount =
+        typeof payload.execution_count === 'number'
+          ? payload.execution_count
+          : (cell as ICodeCellModel).executionCount;
 
       const notificationData = generateNotificationData(
         state,
@@ -439,7 +562,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (notification.timeoutId) {
         clearTimeout(notification.timeoutId);
       }
-      cellNotificationMap.delete(cellId);
+      cleanupNotificationTracking(cellId, notification.notebookId);
     };
 
     // Execution listeners
@@ -561,8 +684,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
         notifySettings.customTimeout,
       );
 
-      const executionCount = (cell.model as ICodeCellModel).executionCount;
-
       const payload: INotifyPayload = {
         cell_id: cell.model.id,
         mode,
@@ -576,8 +697,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
             : null,
         notebook_name: notebook.title.label,
         notebookId: notebook.id,
-        execution_count:
-          typeof executionCount === 'number' ? executionCount : null,
+        // On executionScheduled, we only have previous execution_count
+        // It'll be filled later
+        // For timeout cells: in anyMessage hook when we see the execute_request with the msg_id we tracked for this cell
+        // For other cells: in executed hook
+        execution_count: null,
       };
 
       const notification: ICellNotification = {
