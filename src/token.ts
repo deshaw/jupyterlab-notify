@@ -116,7 +116,7 @@ export type NotifyType = 'completed' | 'failed' | 'timeout';
  * Timeout options for the submenu
  */
 export const TIMEOUT_OPTIONS = [
-  { label: 'default', value: 'default' },
+  { label: 'Notebook Default', value: 'default' },
   { label: '1 min', value: '1m' },
   { label: '30 min', value: '30m' },
   { label: 'Custom', value: 'custom' },
