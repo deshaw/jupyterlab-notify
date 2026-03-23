@@ -37,14 +37,15 @@ Here’s an example configuration enabling Slack and email notifications:
 ```
 
 - **`slack_token`**: A Slack bot token used to send notifications to your Slack workspace.
+
   - **How to get it**: See [Slack API Quickstart](https://api.slack.com/quickstart) to create a bot and obtain a token.
   - **Required Bot Token Scopes**: Your Slack app must have the following OAuth scopes granted under **OAuth & Permissions → Bot Token Scopes** in the [Slack API dashboard](https://api.slack.com/apps):
 
-    | Scope | Purpose |
-    |---|---|
-    | `chat:write` | Post messages to channels or DMs the bot is a member of |
-    | `chat:write.public` | Post to public channels without the bot needing to join first |
-    | `im:write` | Open direct message conversations with users (required when `slack_user_id` is set) |
+    | Scope               | Purpose                                                                             |
+    | ------------------- | ----------------------------------------------------------------------------------- |
+    | `chat:write`        | Post messages to channels or DMs the bot is a member of                             |
+    | `chat:write.public` | Post to public channels without the bot needing to join first                       |
+    | `im:write`          | Open direct message conversations with users (required when `slack_user_id` is set) |
 
 - **`slack_channel_name`**: The name of the Slack channel (e.g., `"notifications"`) where messages will be posted.
 - **`email`**: The email address to receive notifications.
