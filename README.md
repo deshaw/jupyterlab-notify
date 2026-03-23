@@ -65,7 +65,7 @@ These settings allow for customization, such as using a custom SMTP server or ch
 
 You can control when notifications are sent by setting a mode for each cell. Modes can be configured through the JupyterLab interface by clicking on the bell icon in the cell toolbar.
 
-![image](https://raw.githubusercontent.com/deshaw/jupyterlab-notify/refs/heads/main/docs/celltoolbar-menu-screenshot.png)
+![image](https://github.com/deshaw/jupyterlab-notify/blob/main/docs/celltoolbar-menu-screenshot.png?raw=true)
 
 **Supported modes include:**
 
