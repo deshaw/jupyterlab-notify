@@ -369,11 +369,79 @@ test('Notification does not trigger on execution completion with "custom-timeout
   await page.notebook.enterCellEditingMode(0);
   await page.keyboard.type('"test"');
   await page.notebook.runCell(0);
-  await page.waitForTimeout(1500); // Wait for notification
+  await page.waitForTimeout(500); // Wait for notification
 
   // Verify timeout notification
   const notifications = await page.evaluate(() => window.mockNotifications);
   expect(notifications.length).toBe(0);
+});
+
+test('Custom-timeout notification includes cell number once execution starts', async ({
+  page,
+}) => {
+  await setupNotificationMock(page);
+
+  await createNewNotebook(page, 'test.ipynb');
+  await page.sidebar.close('left');
+
+  await selectCellNotificationMode(
+    page,
+    0,
+    'Custom Timeout',
+    'Custom',
+    '1',
+    'seconds',
+  );
+
+  await page.notebook.enterCellEditingMode(0);
+  await page.keyboard.type('import time; time.sleep(1.5)');
+  await page.notebook.runCell(0);
+  await page.waitForTimeout(500);
+
+  const notifications = await page.evaluate(() => window.mockNotifications);
+  expect(notifications.length).toBeGreaterThan(0);
+  expect(notifications[0].title).toBe('test: Cell execution timeout reached');
+  expect(notifications[0].body).toMatch(/Cell \[1\]/);
+});
+
+test('Custom-timeout notification does not include cell number before execution', async ({
+  page,
+}) => {
+  await setupNotificationMock(page);
+
+  await createNewNotebook(page, 'test.ipynb');
+  await page.sidebar.close('left');
+
+  await selectCellNotificationMode(
+    page,
+    0,
+    'Never'
+  );
+
+  await page.notebook.enterCellEditingMode(0);
+  await page.keyboard.type('import time; time.sleep(2)');
+  const runCellPromise = page.notebook.runCell(0);
+
+  await selectCellNotificationMode(
+    page,
+    1,
+    'Custom Timeout',
+    'Custom',
+    '1',
+    'seconds',
+  );
+
+  await page.notebook.enterCellEditingMode(1);
+  await page.keyboard.type('import time; time.sleep(1)');
+  const runCellPromise2 = page.notebook.runCell(1);
+  await page.waitForTimeout(1500); // Wait for timeout
+
+  const notifications = await page.evaluate(() => window.mockNotifications);
+  expect(notifications.length).toBeGreaterThan(0);
+  expect(notifications[0].title).toBe('test: Cell execution timeout reached');
+  expect(notifications[0].body).toMatch('Timed out before execution');
+  await runCellPromise2.catch(() => {});
+  await runCellPromise.catch(() => {});
 });
 
 test('Displays warning when email is enabled but not configured', async ({
