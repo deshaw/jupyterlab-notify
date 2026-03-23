@@ -14,7 +14,8 @@
   "license": "BSD-3-Clause",
   "files": [
     "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
-    "style/index.js"
+    "style/index.js",
+    "schema/*.json"
   ],
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -50,13 +51,14 @@
     "watch:src": "tsc -w --sourceMap"
   },
   "dependencies": {
-    "@jupyterlab/application": "^4.0.0-beta.0",
-    "@jupyterlab/rendermime-interfaces": "^3.8.0-rc.1",
-    "@lumino/coreutils": "^2.0.0",
-    "@lumino/widgets": "^2.0.1"
+    "@jupyterlab/application": "^4.0.0",
+    "@jupyterlab/notebook": "^4.0.0",
+    "@jupyterlab/rendermime-interfaces": "^3.8.0",
+    "@lumino/coreutils": "^2.1.2",
+    "@lumino/widgets": "^2.3.0"
   },
   "devDependencies": {
-    "@jupyterlab/builder": "^4.0.0-beta.0",
+    "@jupyterlab/builder": "^4.0.0",
     "@types/json-schema": "^7.0.11",
     "@types/react": "^18.0.26",
     "@typescript-eslint/eslint-plugin": "^5.55.0",
@@ -80,8 +82,9 @@
     "yjs": "^13.5.40"
   },
   "jupyterlab": {
-    "mimeExtension": true,
-    "outputDir": "jupyterlab_notify/labextension"
+    "extension": "lib/index.js",
+    "outputDir": "jupyterlab_notify/labextension",
+    "schemaDir": "schema"
   },
   "styleModule": "style/index.js",
   "eslintIgnore": [
@@ -89,7 +92,10 @@
     "dist",
     "coverage",
     "**/*.d.ts",
-    "tests"
+    "tests",
+    "**/__tests__",
+    "ui-tests",
+    "style"
   ],
   "prettier": {
     "singleQuote": true,
@@ -106,7 +112,7 @@
     ],
     "parser": "@typescript-eslint/parser",
     "parserOptions": {
-      "project": "tsconfig.json",
+      "project": true,
       "sourceType": "module"
     },
     "plugins": [
@@ -132,7 +138,7 @@
           "args": "none"
         }
       ],
-      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-namespace": "off",
       "@typescript-eslint/no-use-before-define": "off",
       "@typescript-eslint/quotes": [
@@ -160,7 +166,8 @@
     "rules": {
       "property-no-vendor-prefix": null,
       "selector-no-vendor-prefix": null,
-      "value-no-vendor-prefix": null
+      "value-no-vendor-prefix": null,
+      "selector-class-pattern": null
     }
   }
 }

@@ -1,0 +1,36 @@
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+        description: "Checks YAML files for syntax errors"
+      - id: check-toml
+        description: "Checks TOML files (e.g., pyproject.toml) for syntax errors"
+      - id: check-json
+        description: "Checks JSON files (e.g., package.json) for syntax errors"
+      - id: end-of-file-fixer
+        description: "Ensures files end with a newline"
+      - id: trailing-whitespace
+        description: "Removes trailing whitespace from files"
+
+  # Python hooks
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+
+  # Local hooks for TypeScript/JavaScript
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: 'npm run prettier --write'
+        language: node
+        types_or: [json, ts, tsx, javascript, jsx, css]
+        exclude: \.ipynb$
+      - id: eslint
+        name: eslint
+        entry: 'npm run eslint --fix'
+        language: node
+        types_or: [ts, tsx, javascript, jsx]

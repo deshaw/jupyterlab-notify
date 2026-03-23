@@ -1,0 +1,37 @@
+name: Python Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  python_tests:
+    name: Python Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[test]"
+
+      - name: Run Python Tests
+        run: |
+          cd jupyterlab_notify/tests
+          pytest
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-test-results
+          path: ./jupyterlab_notify/tests/*.log

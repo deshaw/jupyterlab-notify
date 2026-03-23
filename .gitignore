@@ -119,3 +119,6 @@ dmypy.json
 
 # Yarn cache
 .yarn/
+ui-tests/playwright-report
+ui-tests/test-results
+**/*.db

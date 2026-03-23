@@ -1,19 +1,16 @@
-from   email.message            import EmailMessage
-from   enum                     import Enum
-from   getpass                  import getuser
-from   importlib                import import_module
+from email.message import EmailMessage
+from enum import Enum
+from getpass import getuser
+from importlib import import_module
 import inspect
 import time
-from   traitlets                import Any, Unicode
+from traitlets import Any, Unicode
 import uuid
 
-from   IPython                  import get_ipython
-from   IPython.core.magic       import (Magics, cell_magic, line_magic,
-                                        magics_class)
-from   IPython.core.magic_arguments \
-                                import (argument, magic_arguments,
-                                        parse_argstring)
-from   IPython.display          import display
+from IPython import get_ipython
+from IPython.core.magic import Magics, cell_magic, line_magic, magics_class
+from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
+from IPython.display import display
 
 
 _DEFAULT_SUCCESS_MESSAGE = "Cell execution completed successfully"

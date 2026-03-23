@@ -1,0 +1,63 @@
+name: UI Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    name: UI Tests
+    timeout-minutes: 80
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Base Setup
+        uses: jupyterlab/maintainer-tools/.github/actions/base-setup@v1
+
+      - name: Set up browser cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/pw-browsers
+          key: ${{ runner.os }}-${{ hashFiles('ui-tests/yarn.lock') }}
+
+      - name: Install jupyterlab
+        run: python -m pip install -U "jupyterlab>=4.0.0b0,<5"
+
+      - name: Install extension
+        run: python -m pip install -e .
+
+      - name: Install dependencies
+        run: |
+          jlpm install
+          cd ui-tests
+          jlpm install
+
+      - name: Launch JupyterLab
+        run: |
+          cd ui-tests
+          jlpm start &
+
+      - name: Install browser and build extension
+        run: |
+          jlpm run build
+          cd ui-tests
+          jlpm playwright install chromium
+
+      - name: Wait for JupyterLab to be ready
+        run: npx wait-on@7.2.0 http-get://localhost:8888/lab -t 360000
+
+      - name: Run UI Tests
+        run: |
+          cd ui-tests
+          jlpm test
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ui-tests/test-results

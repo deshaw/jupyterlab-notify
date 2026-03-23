@@ -1,115 +1,1402 @@
-import { IRenderMime } from '@jupyterlab/rendermime-interfaces';
+import {
+  ILabShell,
+  JupyterFrontEnd,
+  JupyterFrontEndPlugin,
+} from '@jupyterlab/application';
+import { Kernel, KernelMessage } from '@jupyterlab/services';
+import {
+  INotebookModel,
+  INotebookTracker,
+  KernelError,
+  NotebookActions,
+  NotebookPanel,
+} from '@jupyterlab/notebook';
+import { ISettingRegistry } from '@jupyterlab/settingregistry';
+import { ITranslator, nullTranslator } from '@jupyterlab/translation';
+import { ToolbarButton, settingsIcon } from '@jupyterlab/ui-components';
+import {
+  IToolbarWidgetRegistry,
+  showErrorMessage,
+  Notification as JupyterNotification,
+} from '@jupyterlab/apputils';
+import {
+  generateNotificationData,
+  displayConfigWarning,
+  decodeThresholdToSeconds,
+  parseThreshold,
+  caretSVG,
+  promptForTimeout,
+  getThresholdValue,
+  ITimeoutPromptOptions,
+} from './utils';
+import { TimeUnit } from './timeInput';
+import {
+  bellOutlineIcon,
+  bellOffIcon,
+  bellAlertIcon,
+  bellClockIcon,
+} from './icons';
+import { requestAPI } from './handler';
+import { Cell, ICellModel, ICodeCellModel } from '@jupyterlab/cells';
+import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
+import { TooltipMenuSvg } from './menuTooltip';
+import { BatchNotifier } from './batch_notify';
+import { createRendererFactory } from './mime';
+import {
+  IExecutionTimingMetadata,
+  IMode,
+  INotifySettings,
+  INotifyMetadata,
+  IInitialResponse,
+  INotifyPayload,
+  ICellNotification,
+  ModeId,
+  NotifyType,
+  TIMEOUT_OPTIONS,
+  NOTIFY_METADATA_KEY,
+  NOTEBOOK_DEFAULT_THRESHOLD_KEY,
+  NOTEBOOK_CUSTOM_TIMEOUT_KEY,
+  CELL_DEFAULT_THRESHOLD_KEY,
+  CELL_CUSTOM_TIMEOUT_KEY,
+  NB_TOOLBAR_NOTIFICATION_CLASS,
+} from './token';
 
-import { JSONObject } from '@lumino/coreutils';
-
-import { Widget } from '@lumino/widgets';
-
-/**
- * The default mime type for the extension.
- */
-const MIME_TYPE = 'application/desktop-notify+json';
-const PROCESSED_KEY = 'isProcessed';
-// The below can be used to customize notifications
-const NOTIFICATION_OPTIONS = {
-  icon: '/static/favicons/favicon.ico',
-};
-
-interface INotifyMimeData {
-  type: 'INIT' | 'NOTIFY';
-  payload: Record<string, unknown>;
-  isProcessed: boolean;
-  id: string;
+namespace CommandIDs {
+  export const setNotificationMode = 'notify:set-notification-mode';
+  export const setCustomTimeout = 'notify:set-custom-timeout';
+  export const setNotebookCustomTimeout = 'notify:set-notebook-custom-timeout';
+  export const setNotebookDefaultThreshold =
+    'notify:set-notebook-default-threshold';
+  export const openNotificationSettings = 'notify:open-notification-settings';
+  export const setNotebookNotificationMode =
+    'notify:set-notebook-notification-mode';
 }
 
+const MODES: Record<ModeId, IMode & { info: string }> = {
+  default: {
+    label: 'Default',
+    icon: bellOutlineIcon,
+    info: 'Notify after cell finishes execution if it exceeds the default threshold.',
+  },
+  never: {
+    label: 'Never',
+    icon: bellOffIcon,
+    info: 'Never send notifications for this cell.',
+  },
+  'on-error': {
+    label: 'On Error',
+    icon: bellAlertIcon,
+    info: 'Notify only if cell execution fails.',
+  },
+  'custom-timeout': {
+    label: 'Custom Timeout',
+    icon: bellClockIcon,
+    info: 'Notify if a cell is still running after a set timeout.',
+  },
+};
+
 /**
- * A widget for rendering desktop-notify.
+ * Main plugin definition
  */
-class OutputWidget extends Widget implements IRenderMime.IRenderer {
-  constructor(options: IRenderMime.IRendererOptions) {
-    super();
-    this._mimeType = options.mimeType;
-  }
+const plugin: JupyterFrontEndPlugin<void> = {
+  id: 'jupyterlab-notify:plugin',
+  description: 'Enhanced cell execution notifications for JupyterLab',
+  autoStart: true,
+  requires: [INotebookTracker, IRenderMimeRegistry],
+  optional: [IToolbarWidgetRegistry, ITranslator, ISettingRegistry],
+  activate: async (
+    app: JupyterFrontEnd,
+    tracker: INotebookTracker,
+    rendermime: IRenderMimeRegistry,
+    toolbarRegistry: IToolbarWidgetRegistry | null,
+    translator: ITranslator | null,
+    settingRegistry: ISettingRegistry | null,
+  ) => {
+    console.log('JupyterLab extension jupyterlab-notify is activated!');
 
-  renderModel(model: IRenderMime.IMimeModel): Promise<void> {
-    const mimeData = model.data[this._mimeType] as unknown as INotifyMimeData;
+    const batchNotifier = new BatchNotifier(rendermime);
+    const rendererFactory = createRendererFactory(
+      tracker,
+      app.shell as ILabShell,
+    );
+    rendermime.addFactory(rendererFactory, 0);
 
-    const payload = mimeData.payload as JSONObject;
+    // Default settings
+    let notifySettings: INotifySettings = {
+      defaultMode: 'default',
+      failureMessage: 'Cell execution failed',
+      mail: false,
+      slack: false,
+      successMessage: 'Cell execution completed successfully',
+      defaultThreshold: 30,
+      customTimeout: 30,
+      alwaysNotifyOnError: true,
+    };
 
-    // If the PROCESSED_KEY is available - do not take any action
-    // This is done so that notifications are not repeated on page refresh
-    if (mimeData[PROCESSED_KEY]) {
-      return Promise.resolve();
-    }
+    // Settings management
+    const updateSettings = (settings: ISettingRegistry.ISettings): void => {
+      notifySettings = { ...notifySettings, ...settings.composite };
+    };
 
-    // For first-time users, check for necessary permissions and prompt if needed
-    if (
-      (mimeData.type === 'INIT' && Notification.permission === 'default') ||
-      Notification.permission !== 'granted'
-    ) {
-      // We do not have any actions to perform upon acquiring permission and so
-      // handle only the errors (if any)
-      Notification.requestPermission().catch(err => {
-        alert(
-          `Encountered error - ${err} while requesting permissions for notebook notifications`,
-        );
+    if (settingRegistry) {
+      // Ensure the recordTiming setting is enabled for the extension to function correctly
+      const nbPluginId = '@jupyterlab/notebook-extension:tracker';
+      const nbSettings = await settingRegistry.load(nbPluginId);
+      await nbSettings.set('recordTiming', true);
+
+      // Ensure recordTiming remains true if user tries to change it
+      nbSettings.changed.connect(async () => {
+        const recordTiming = nbSettings.get('recordTiming')
+          .composite as boolean;
+        if (!recordTiming) {
+          await nbSettings.set('recordTiming', true);
+        }
       });
-    }
-
-    if (mimeData.type === 'NOTIFY') {
-      // Notify only if there's sufficient permissions and this has not been processed previously
-      if (Notification.permission === 'granted' && !mimeData[PROCESSED_KEY]) {
-        new Notification(payload.title as string, NOTIFICATION_OPTIONS);
-      } else {
-        this.node.innerHTML = `<div id="${mimeData.id}">Missing permissions - update "Notifications" preferences under browser settings to receive notifications</div>`;
+      try {
+        const settings = await settingRegistry.load(plugin.id);
+        updateSettings(settings);
+        settings.changed.connect(updateSettings);
+      } catch (reason) {
+        console.error('Failed to load settings for jupyterlab-notify:', reason);
       }
     }
 
-    if (!mimeData[PROCESSED_KEY]) {
-      // Add isProcessed property to each notification message so that we can avoid repeating notifications on page reloads
-      const updatedModel: IRenderMime.IMimeModel = JSON.parse(
-        JSON.stringify(model),
-      );
-      const updatedMimeData = updatedModel.data[
-        this._mimeType
-      ] as unknown as INotifyMimeData;
-      updatedMimeData[PROCESSED_KEY] = true;
-      // The below model update is done inside a separate function and added to
-      // the event queue - this is done so to avoid re-rendering before the
-      // initial render is complete.
-      //
-      // Without the setTimeout, calling model.setData triggers the callbacks
-      // registered on model-updates that re-renders the widget and it again tries
-      // to update the model which again causes a re-render and so on.
-      setTimeout(() => {
-        model.setData(updatedModel);
-      }, 0);
+    const addCellMetadata = (
+      cell: ICellModel,
+      nbmodel: INotebookModel,
+    ): void => {
+      if (cell.getMetadata(NOTIFY_METADATA_KEY)) {
+        return;
+      }
+      // If notebook metadata exists, use its mode for the cell; otherwise, use defaultMode
+      const nbMetadata = nbmodel.getMetadata(NOTIFY_METADATA_KEY);
+      const mode = nbMetadata?.mode ?? notifySettings.defaultMode;
+      if (mode === 'default') {
+        // Use threshold from notebook metadata if present
+        let nbThreshold = nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
+        if (typeof nbThreshold === 'number') {
+          nbThreshold = `${nbThreshold}s`;
+        }
+        cell.setMetadata(NOTIFY_METADATA_KEY, {
+          mode,
+          ...(nbThreshold ? { [CELL_DEFAULT_THRESHOLD_KEY]: nbThreshold } : {}),
+        });
+      } else if (mode === 'custom-timeout') {
+        // Use timeout from notebook metadata's NOTEBOOK_CUSTOM_TIMEOUT_KEY if present
+        let nbCustomTimeout = nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY];
+        if (typeof nbCustomTimeout === 'number') {
+          nbCustomTimeout = `${nbCustomTimeout}s`;
+        }
+        cell.setMetadata(NOTIFY_METADATA_KEY, {
+          mode,
+          ...(nbCustomTimeout
+            ? { [CELL_CUSTOM_TIMEOUT_KEY]: nbCustomTimeout }
+            : {}),
+        });
+      } else {
+        cell.setMetadata(NOTIFY_METADATA_KEY, { mode });
+      }
+    };
+
+    const cellNotificationMap: Map<string, ICellNotification> = new Map();
+    const msgIdToCellByNotebook: Map<string, Map<string, string>> = new Map();
+
+    const clearTrackedMsgMappingsForCell = (
+      notebookId: string,
+      cellId: string,
+    ): void => {
+      const msgIdMap = msgIdToCellByNotebook.get(notebookId);
+      if (!msgIdMap) {
+        return;
+      }
+
+      for (const [msgId, mappedCellId] of msgIdMap.entries()) {
+        if (mappedCellId === cellId) {
+          msgIdMap.delete(msgId);
+        }
+      }
+      if (msgIdMap.size === 0) {
+        msgIdToCellByNotebook.delete(notebookId);
+      }
+    };
+
+    const cleanupNotificationTracking = (
+      cellId: string,
+      notebookId: string,
+    ): void => {
+      clearTrackedMsgMappingsForCell(notebookId, cellId);
+      cellNotificationMap.delete(cellId);
+    };
+
+    // Track new notebooks
+    tracker.widgetAdded.connect(async (_, notebookPanel: NotebookPanel) => {
+      // Wait for the notebook to be fully ready
+      await notebookPanel.revealed;
+      await notebookPanel.sessionContext.ready;
+
+      const notebook = notebookPanel.content;
+      const notebookId = notebook.id;
+      const kernelMessageHooks = {
+        kernel: null as Kernel.IKernelConnection | null,
+        anyMessage: (
+          _: Kernel.IKernelConnection,
+          args: Kernel.IAnyMessageArgs,
+        ) => {
+          if (
+            args.direction !== 'send' ||
+            args.msg.header.msg_type !== 'execute_request'
+          ) {
+            return;
+          }
+
+          const activeCell = notebookPanel.content.activeCell;
+          if (!activeCell || activeCell.model.type !== 'code') {
+            return;
+          }
+
+          const notification = cellNotificationMap.get(activeCell.model.id);
+          if (!notification || notification.payload.mode !== 'custom-timeout') {
+            return;
+          }
+
+          const msgMap = msgIdToCellByNotebook.get(notebookId) ?? new Map();
+          msgMap.set(args.msg.header.msg_id, activeCell.model.id);
+          msgIdToCellByNotebook.set(notebookId, msgMap);
+        },
+        iopubMessage: (
+          _: Kernel.IKernelConnection,
+          msg: KernelMessage.IMessage,
+        ) => {
+          if (!KernelMessage.isExecuteInputMsg(msg)) {
+            return;
+          }
+
+          const msgIdMap = msgIdToCellByNotebook.get(notebookId);
+          if (!msgIdMap) {
+            return;
+          }
+
+          const parentMsgId = msg.parent_header.msg_id;
+          if (!parentMsgId) {
+            return;
+          }
+
+          const cellId = msgIdMap.get(parentMsgId);
+          if (!cellId) {
+            return;
+          }
+
+          const notification = cellNotificationMap.get(cellId);
+          if (notification) {
+            notification.payload.execution_count = msg.content.execution_count;
+          }
+
+          msgIdMap.delete(parentMsgId);
+          if (msgIdMap.size === 0) {
+            msgIdToCellByNotebook.delete(notebookId);
+          }
+        },
+      };
+
+      const connectKernelMessageHooks = (
+        kernel: Kernel.IKernelConnection | null,
+      ): void => {
+        if (kernelMessageHooks.kernel) {
+          kernelMessageHooks.kernel.anyMessage.disconnect(
+            kernelMessageHooks.anyMessage,
+          );
+          kernelMessageHooks.kernel.iopubMessage.disconnect(
+            kernelMessageHooks.iopubMessage,
+          );
+        }
+
+        kernelMessageHooks.kernel = kernel;
+        if (kernel) {
+          kernel.anyMessage.connect(kernelMessageHooks.anyMessage);
+          kernel.iopubMessage.connect(kernelMessageHooks.iopubMessage);
+        }
+      };
+
+      notebookPanel.disposed.connect(() => {
+        connectKernelMessageHooks(null);
+        msgIdToCellByNotebook.delete(notebookId);
+      });
+      // Set notebook metadata if not present
+      const nbModel = notebook.model;
+      if (nbModel && !nbModel.getMetadata(NOTIFY_METADATA_KEY)) {
+        nbModel.setMetadata(NOTIFY_METADATA_KEY, {
+          mode: notifySettings.defaultMode,
+          [NOTEBOOK_CUSTOM_TIMEOUT_KEY]:
+            typeof notifySettings.customTimeout === 'number'
+              ? `${notifySettings.customTimeout}s`
+              : notifySettings.customTimeout,
+          [NOTEBOOK_DEFAULT_THRESHOLD_KEY]:
+            typeof notifySettings.defaultThreshold === 'number'
+              ? `${notifySettings.defaultThreshold}s`
+              : notifySettings.defaultThreshold,
+        });
+      }
+      // Explicitly run addCellMetadata on the first cell as we miss it while waiting above
+      if (notebook.widgets.length > 0 && nbModel) {
+        const firstCell = notebook.widgets[0].model;
+        if (firstCell && firstCell.type === 'code') {
+          addCellMetadata(firstCell, nbModel);
+        }
+      }
+      // Track new cells
+      nbModel?.cells.changed.connect((_, change) => {
+        if (change.type === 'add') {
+          change.newValues.forEach(cell => {
+            if (cell.type === 'code') {
+              if (notebook.model) {
+                addCellMetadata(cell, notebook.model);
+              }
+            }
+          });
+        }
+      });
+
+      // Monitor kernel status changes to detect kernel death and autorestarts
+      const handleKernelDeath = async () => {
+        const session = notebookPanel.sessionContext.session;
+        if (!session) {
+          return;
+        }
+        const kernel = session.kernel;
+        if (
+          !kernel ||
+          (kernel.status !== 'autorestarting' && kernel.status !== 'dead')
+        ) {
+          return;
+        }
+
+        const notebookId = notebook.id;
+        for (const [cellId, notification] of cellNotificationMap.entries()) {
+          if (
+            notification.notebookId === notebookId &&
+            !notification.notificationIssued &&
+            (notifySettings.alwaysNotifyOnError
+              ? notification.payload.mode !== 'never'
+              : notification.payload.mode === 'on-error')
+          ) {
+            const cellWidget = notebook.widgets.find(
+              w => w.model.id === cellId,
+            );
+            if (cellWidget) {
+              await handleNotification(cellWidget.model, false, false, {
+                errorName: 'Kernel Died',
+                name: 'Kernel Died',
+                errorValue: `The kernel has died. Status: "${kernel.status}"`,
+                message: `The kernel has died. Status: "${kernel.status}"`,
+                traceback: [],
+              });
+            }
+          }
+        }
+      };
+
+      notebookPanel.sessionContext.statusChanged.connect(handleKernelDeath);
+
+      const onKernelStatusChanged = () => {
+        handleKernelDeath().catch(err => {
+          console.error('Error handling kernel death:', err);
+        });
+      };
+
+      notebookPanel.sessionContext.kernelChanged.connect(() => {
+        const kernel = notebookPanel.sessionContext.session?.kernel;
+        if (kernel) {
+          // Connect to kernel status changes
+          kernel.statusChanged.disconnect(onKernelStatusChanged);
+          kernel.statusChanged.connect(onKernelStatusChanged);
+        }
+        connectKernelMessageHooks(kernel ?? null);
+      });
+
+      // Connect to initial kernel if it exists
+      const kernel = notebookPanel.sessionContext.session?.kernel;
+      if (kernel) {
+        kernel.statusChanged.connect(onKernelStatusChanged);
+      }
+      connectKernelMessageHooks(kernel ?? null);
+    });
+
+    // Server configuration
+    let config: IInitialResponse = {
+      nbmodel_installed: false,
+      email_configured: false,
+      slack_configured: false,
+      smtp_server_running: false,
+    };
+
+    try {
+      config = await requestAPI<IInitialResponse>('notify');
+    } catch (e) {
+      console.error('Checking server capability failed:', e);
     }
 
-    return Promise.resolve();
-  }
+    /**
+     * Handles notification rendering based on execution status
+     */
+    const handleNotification = async (
+      cell: ICellModel,
+      success: boolean,
+      triggeredViaTimeout = false,
+      kernelError: KernelError | null = null,
+    ): Promise<void> => {
+      if (cell.type !== 'code') {
+        return;
+      }
+      const cellId = cell.id;
+      const notification = cellNotificationMap.get(cellId);
+      if (!notification || notification.notificationIssued) {
+        return;
+      }
 
-  private _mimeType: string;
-}
+      const { payload } = notification;
+      const liveExecutionCount = (cell as ICodeCellModel).executionCount;
+      if (typeof liveExecutionCount === 'number') {
+        payload.execution_count = liveExecutionCount;
+      }
 
-/**
- * A mime renderer factory for desktop-notify data.
- */
-const rendererFactory: IRenderMime.IRendererFactory = {
-  safe: true,
-  mimeTypes: [MIME_TYPE],
-  createRenderer: options => new OutputWidget(options),
+      const isExecutionFailure = !success;
+      const shouldNotifyForError =
+        isExecutionFailure &&
+        (payload.mode === 'on-error' || notifySettings.alwaysNotifyOnError);
+
+      if (payload.mode === 'on-error' && success && !triggeredViaTimeout) {
+        cleanupNotificationTracking(cellId, notification.notebookId);
+        return;
+      }
+      // Return for custom-timeout if this isn't triggered by timeout or if cell already finished execution
+      if (
+        payload.mode === 'custom-timeout' &&
+        !shouldNotifyForError &&
+        (!triggeredViaTimeout ||
+          (cell as ICodeCellModel).executionState !== 'running')
+      ) {
+        cleanupNotificationTracking(cellId, notification.notebookId);
+        return;
+      }
+
+      // Handle case when threshold isn't exceeded in default mode
+      if (payload.mode === 'default' && !shouldNotifyForError) {
+        const timingData: IExecutionTimingMetadata =
+          cell.getMetadata('execution');
+        if (!timingData) {
+          console.warn(
+            'Skipping notification: Missing execution timing data for cell',
+            cellId,
+          );
+          return;
+        }
+        const startTime = timingData['shell.execute_reply.started'];
+        const endTime =
+          timingData['shell.execute_reply'] ?? timingData['execution_failed'];
+
+        // Skip notification if execution time is below the threshold
+        if (
+          payload.threshold &&
+          startTime &&
+          endTime &&
+          new Date(endTime).getTime() - new Date(startTime).getTime() <
+            payload.threshold * 1000
+        ) {
+          return;
+        }
+      }
+
+      // Determine notification type based on execution state
+      const state: NotifyType = !success
+        ? 'failed'
+        : triggeredViaTimeout
+        ? 'timeout'
+        : 'completed';
+      const message =
+        state === 'timeout'
+          ? 'Cell execution timeout reached'
+          : state === 'completed'
+          ? notifySettings.successMessage
+          : notifySettings.failureMessage;
+      const executionCount =
+        typeof payload.execution_count === 'number'
+          ? payload.execution_count
+          : (cell as ICodeCellModel).executionCount;
+
+      const notificationData = generateNotificationData(
+        state,
+        message,
+        cellId,
+        payload.notebook_name,
+        payload.notebookId,
+        cell.getMetadata('execution') as IExecutionTimingMetadata | null,
+        typeof executionCount === 'number' ? executionCount : null,
+        kernelError,
+      );
+
+      if (!config.nbmodel_installed) {
+        try {
+          await requestAPI('notify-trigger', {
+            method: 'POST',
+            body: JSON.stringify({
+              ...payload,
+              success,
+              timer: triggeredViaTimeout,
+              error: kernelError
+                ? `${kernelError.errorName}: ${kernelError.errorValue}`
+                : '',
+            }),
+          });
+        } catch (e) {
+          console.error('Failed to trigger notification:', e);
+        }
+      }
+
+      try {
+        batchNotifier.notify(state, notificationData);
+        notification.notificationIssued = true;
+      } catch (err) {
+        console.error('Error rendering notification:', err);
+      }
+
+      if (notification.timeoutId) {
+        clearTimeout(notification.timeoutId);
+      }
+      cleanupNotificationTracking(cellId, notification.notebookId);
+    };
+
+    // Execution listeners
+    NotebookActions.executed.connect((_, args) => {
+      void handleNotification(
+        args.cell.model,
+        args.success,
+        false,
+        args.error ?? null,
+      ).catch(err => {
+        console.error('Error handling notification:', err);
+      });
+    });
+
+    NotebookActions.executionScheduled.connect(async (_, args) => {
+      const { notebook, cell } = args;
+      const cellMetadata = cell.model.getMetadata(
+        NOTIFY_METADATA_KEY,
+      ) as INotifyMetadata;
+      const mode = cellMetadata?.mode;
+      if (!mode || mode === 'never') {
+        return;
+      }
+
+      if (Notification.permission !== 'granted') {
+        await Notification.requestPermission().catch(err => {
+          JupyterNotification.emit('Permission Error', 'error', {
+            autoClose: 3000,
+            actions: [
+              {
+                label: 'Show Details',
+                callback: () =>
+                  showErrorMessage('Permission Error', {
+                    message: err,
+                  }),
+              },
+            ],
+          });
+        });
+      }
+      // Show configuration warnings
+      if (notifySettings.mail) {
+        if (!config.email_configured) {
+          displayConfigWarning('Email', 'email', 'youremail@example.com');
+        } else if (!config.smtp_server_running) {
+          JupyterNotification.emit('SMTP Server Not Running', 'error', {
+            autoClose: 3000,
+            actions: [
+              {
+                label: 'Help',
+                callback: () =>
+                  showErrorMessage('SMTP server is not running', {
+                    message:
+                      'Email notifications require a local SMTP server running.',
+                  }),
+              },
+            ],
+          });
+        }
+      }
+      // For making slack failure more verbose, we need more data from backend so we can display here
+      if (notifySettings.slack && !config.slack_configured) {
+        displayConfigWarning(
+          'Slack',
+          'slack_token',
+          'xoxb-your-slackbot-token',
+        );
+      }
+      if (mode === 'default') {
+        // Get the threshold value: prefer cell, then notebook, then settings
+        const thresholdValue = getThresholdValue(
+          mode,
+          cellMetadata,
+          notebook.model?.getMetadata(NOTIFY_METADATA_KEY),
+          notifySettings.defaultThreshold,
+          notifySettings.customTimeout,
+        );
+
+        if (thresholdValue !== null && thresholdValue !== undefined) {
+          const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
+          if (!Number.isFinite(thresholdInSeconds)) {
+            JupyterNotification.emit(
+              `Invalid default threshold value: Expected a finite number, but received ${thresholdValue}`,
+              'error',
+              { autoClose: 3000 },
+            );
+            return;
+          }
+        }
+      }
+
+      if (mode === 'custom-timeout') {
+        const thresholdValue = getThresholdValue(
+          mode,
+          cellMetadata,
+          notebook.model?.getMetadata(NOTIFY_METADATA_KEY),
+          notifySettings.defaultThreshold,
+          notifySettings.customTimeout,
+        );
+
+        if (thresholdValue !== null && thresholdValue !== undefined) {
+          const thresholdInSeconds = decodeThresholdToSeconds(thresholdValue);
+          if (!Number.isFinite(thresholdInSeconds)) {
+            JupyterNotification.emit(
+              `Invalid custom timeout value: Expected a finite number, but received ${thresholdValue}`,
+              'error',
+              { autoClose: 3000 },
+            );
+            return;
+          }
+        }
+      }
+
+      const thresholdValue = getThresholdValue(
+        mode,
+        cellMetadata,
+        notebook.model?.getMetadata(NOTIFY_METADATA_KEY),
+        notifySettings.defaultThreshold,
+        notifySettings.customTimeout,
+      );
+
+      const payload: INotifyPayload = {
+        cell_id: cell.model.id,
+        mode,
+        emailEnabled: config.email_configured && notifySettings.mail,
+        slackEnabled: config.slack_configured && notifySettings.slack,
+        successMessage: notifySettings.successMessage,
+        failureMessage: notifySettings.failureMessage,
+        threshold:
+          thresholdValue !== null && thresholdValue !== undefined
+            ? decodeThresholdToSeconds(thresholdValue)
+            : null,
+        notebook_name: notebook.title.label,
+        notebookId: notebook.id,
+        // On executionScheduled, we only have previous execution_count
+        // It'll be filled later
+        // For timeout cells: in anyMessage hook when we see the execute_request with the msg_id we tracked for this cell
+        // For other cells: in executed hook
+        execution_count: null,
+      };
+
+      const notification: ICellNotification = {
+        payload,
+        timeoutId: null,
+        notificationIssued: false,
+        notebookId: args.notebook.id,
+      };
+
+      if (config.nbmodel_installed) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { execution_count: _, ...payloadWithoutExec } = payload;
+        try {
+          await requestAPI('notify', {
+            method: 'POST',
+            body: JSON.stringify(payloadWithoutExec),
+          });
+        } catch (e) {
+          console.error('Failed to notify server:', e);
+        }
+      }
+
+      cellNotificationMap.set(cell.model.id, notification);
+
+      if (payload.mode === 'custom-timeout') {
+        const timeoutInSeconds = payload.threshold;
+        if (
+          Number.isFinite(timeoutInSeconds) &&
+          timeoutInSeconds !== null &&
+          timeoutInSeconds !== undefined
+        ) {
+          notification.timeoutId = setTimeout(() => {
+            if (!notification.notificationIssued) {
+              void handleNotification(cell.model, true, true).catch(err => {
+                console.error('Error handling notification:', err);
+              });
+            }
+          }, timeoutInSeconds * 1000);
+        }
+      }
+    });
+    const trans = (translator ?? nullTranslator).load('jupyterlab-notify');
+
+    app.commands.addCommand(CommandIDs.openNotificationSettings, {
+      label: trans.__('Settings..'),
+      icon: settingsIcon,
+      execute: () => {
+        app.commands.execute('settingeditor:open', {
+          query: 'Execution Notifications',
+        });
+      },
+    });
+
+    app.commands.addCommand(CommandIDs.setNotebookNotificationMode, {
+      label: args => {
+        if (args.label) {
+          return args.label as string;
+        }
+        const modeId = args.modeId as ModeId;
+        return MODES[modeId].label;
+      },
+      icon: args => MODES[args.modeId as ModeId].icon,
+      execute: args => {
+        const modeId = args.modeId;
+        const notebook = tracker.currentWidget;
+        if (notebook && notebook.model) {
+          const prev = notebook.model.getMetadata(NOTIFY_METADATA_KEY) || {};
+          notebook.model.setMetadata(NOTIFY_METADATA_KEY, {
+            ...prev,
+            mode: modeId,
+          });
+        }
+      },
+    });
+
+    app.commands.addCommand(CommandIDs.setNotificationMode, {
+      label: args => {
+        if (args.label) {
+          return args.label as string;
+        }
+        const modeId = args.modeId as ModeId;
+        return MODES[modeId].label;
+      },
+      icon: args =>
+        args.noIcon ? undefined : MODES[args.modeId as ModeId].icon,
+      execute: args => {
+        const modeId = args.modeId as ModeId;
+        let threshold = args.threshold as string | undefined; // Stored as string, e.g., "120s"
+        const current = tracker.currentWidget;
+        if (!current) {
+          console.warn('No notebook selected');
+          return;
+        }
+        const cell = current.content.activeCell;
+        if (!cell) {
+          return;
+        }
+
+        // Get existing metadata to preserve thresholds
+        const existingMetadata = cell.model.getMetadata(NOTIFY_METADATA_KEY) as
+          | INotifyMetadata
+          | undefined;
+
+        const metadata: INotifyMetadata = { mode: modeId };
+
+        // Preserve existing thresholds from both modes
+        if (existingMetadata?.[CELL_DEFAULT_THRESHOLD_KEY]) {
+          metadata[CELL_DEFAULT_THRESHOLD_KEY] =
+            existingMetadata[CELL_DEFAULT_THRESHOLD_KEY];
+        }
+        if (existingMetadata?.[CELL_CUSTOM_TIMEOUT_KEY]) {
+          metadata[CELL_CUSTOM_TIMEOUT_KEY] =
+            existingMetadata[CELL_CUSTOM_TIMEOUT_KEY];
+        }
+        // Override threshold if explicitly provided in args
+        if (modeId === 'custom-timeout' || modeId === 'default') {
+          const nbModel = current?.model;
+          if (!threshold) {
+            if (modeId === 'default') {
+              threshold =
+                existingMetadata?.[CELL_DEFAULT_THRESHOLD_KEY] ??
+                nbModel?.getMetadata(NOTIFY_METADATA_KEY)?.[
+                  NOTEBOOK_DEFAULT_THRESHOLD_KEY
+                ];
+            } else {
+              threshold =
+                nbModel?.getMetadata(NOTIFY_METADATA_KEY)?.[
+                  NOTEBOOK_CUSTOM_TIMEOUT_KEY
+                ];
+            }
+          }
+          if (threshold) {
+            if (modeId === 'default') {
+              metadata[CELL_DEFAULT_THRESHOLD_KEY] = threshold;
+            } else {
+              metadata[CELL_CUSTOM_TIMEOUT_KEY] = threshold;
+            }
+          }
+        }
+
+        cell.model.setMetadata(NOTIFY_METADATA_KEY, metadata);
+      },
+      isEnabled: () =>
+        !!tracker.currentWidget && !!tracker.currentWidget.content.activeCell,
+    });
+
+    app.commands.addCommand(CommandIDs.setNotebookCustomTimeout, {
+      label: trans.__('Set Custom Timeout'),
+      caption: trans.__('Set Notebook Custom Timeout'),
+      icon: args => (args.toolbar ? bellClockIcon : undefined),
+      execute: async () => {
+        const current = tracker.currentWidget;
+        if (!current || !current.content || !current.model) {
+          return;
+        }
+        const prev = current.model.getMetadata(NOTIFY_METADATA_KEY) || {};
+        let value: number | undefined = undefined;
+        let unit: TimeUnit | undefined = undefined;
+        if (prev[NOTEBOOK_CUSTOM_TIMEOUT_KEY]) {
+          const parsed = parseThreshold(prev[NOTEBOOK_CUSTOM_TIMEOUT_KEY]);
+          if (parsed) {
+            value = parsed.value;
+            unit = parsed.unit;
+          }
+        }
+        const timeoutOptions: ITimeoutPromptOptions = {
+          title: 'Set Notebook Custom Timeout',
+          label: 'Custom timeout value with unit:',
+          placeholder: '30',
+          errorMessage:
+            'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+          defaultValue: value,
+          defaultUnit: unit,
+        };
+        const { value: input, applyToAll } = await promptForTimeout(
+          timeoutOptions,
+          true,
+          translator ?? undefined,
+        );
+        if (input) {
+          current.model.setMetadata(NOTIFY_METADATA_KEY, {
+            ...prev,
+            [NOTEBOOK_CUSTOM_TIMEOUT_KEY]: input,
+          });
+
+          // Apply to all cells if requested
+          if (applyToAll && current.content) {
+            current.content.widgets.forEach(cellWidget => {
+              const cellModel = cellWidget.model;
+              const cellMetadata = cellModel.getMetadata(
+                NOTIFY_METADATA_KEY,
+              ) as INotifyMetadata | undefined;
+
+              // Only update cells that have a customTimeout value
+              if (cellMetadata?.[CELL_CUSTOM_TIMEOUT_KEY]) {
+                cellModel.setMetadata(NOTIFY_METADATA_KEY, {
+                  ...cellMetadata,
+                  [CELL_CUSTOM_TIMEOUT_KEY]: input,
+                });
+              }
+            });
+          }
+        }
+      },
+    });
+
+    app.commands.addCommand(CommandIDs.setNotebookDefaultThreshold, {
+      label: trans.__('Set Default Threshold'),
+      caption: trans.__('Set Notebook Default Threshold'),
+      icon: args => (args.toolbar ? bellOutlineIcon : undefined),
+      execute: async () => {
+        const current = tracker.currentWidget;
+        if (!current || !current.content || !current.model) {
+          return;
+        }
+        const prev = current.model.getMetadata(NOTIFY_METADATA_KEY) || {};
+        let value: number | undefined = undefined;
+        let unit: TimeUnit | undefined = undefined;
+        if (prev[NOTEBOOK_DEFAULT_THRESHOLD_KEY]) {
+          const parsed = parseThreshold(prev[NOTEBOOK_DEFAULT_THRESHOLD_KEY]);
+          if (parsed) {
+            value = parsed.value;
+            unit = parsed.unit;
+          }
+        }
+        const thresholdOptions: ITimeoutPromptOptions = {
+          title: 'Set Notebook Default Threshold',
+          label: 'Default Threshold value with unit:',
+          placeholder: '30',
+          errorMessage:
+            'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+          defaultValue: value,
+          defaultUnit: unit,
+        };
+        const { value: input, applyToAll } = await promptForTimeout(
+          thresholdOptions,
+          true,
+          translator ?? undefined,
+        );
+        if (input) {
+          const prev = current.model.getMetadata(NOTIFY_METADATA_KEY) || {};
+          current.model.setMetadata(NOTIFY_METADATA_KEY, {
+            ...prev,
+            [NOTEBOOK_DEFAULT_THRESHOLD_KEY]: input,
+          });
+
+          // Apply to all cells if requested
+          if (applyToAll && current.content) {
+            current.content.widgets.forEach(cellWidget => {
+              const cellModel = cellWidget.model;
+              const cellMetadata = cellModel.getMetadata(
+                NOTIFY_METADATA_KEY,
+              ) as INotifyMetadata | undefined;
+
+              // Only update cells that have a defaultThreshold value
+              if (cellMetadata?.[CELL_DEFAULT_THRESHOLD_KEY]) {
+                cellModel.setMetadata(NOTIFY_METADATA_KEY, {
+                  ...cellMetadata,
+                  [CELL_DEFAULT_THRESHOLD_KEY]: input,
+                });
+              }
+            });
+          }
+        }
+      },
+    });
+
+    app.commands.addCommand(CommandIDs.setCustomTimeout, {
+      caption: 'Set a custom timeout for cell notifications',
+      label: trans.__('Custom'),
+      execute: async () => {
+        const current = tracker.currentWidget;
+        let value: number | undefined = undefined;
+        let unit: TimeUnit | undefined = undefined;
+        if (current && current.content && current.content.activeCell) {
+          const cell = current.content.activeCell;
+          const prev = cell.model.getMetadata(NOTIFY_METADATA_KEY) || {};
+          if (prev[CELL_CUSTOM_TIMEOUT_KEY]) {
+            const parsed = parseThreshold(prev[CELL_CUSTOM_TIMEOUT_KEY]);
+            if (parsed) {
+              value = parsed.value;
+              unit = parsed.unit;
+            }
+          }
+        }
+        const { value: input } = await promptForTimeout(
+          {
+            title: 'Set Custom Timeout',
+            label: 'Custom timeout value with unit:',
+            placeholder: '30',
+            errorMessage:
+              'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+            defaultValue: value,
+            defaultUnit: unit,
+          } as ITimeoutPromptOptions,
+          false,
+          translator ?? undefined,
+        );
+        if (input) {
+          await app.commands.execute(CommandIDs.setNotificationMode, {
+            modeId: 'custom-timeout',
+            threshold: input,
+          });
+        }
+      },
+    });
+
+    // Menu for Cell Notification modes
+    const cellNotifyMenu = new TooltipMenuSvg({ commands: app.commands });
+    cellNotifyMenu.addClass('jp-notify-menu');
+    cellNotifyMenu.title.label = trans.__('Cell Notification');
+
+    // Menu items will be built dynamically when the menu is opened
+
+    // Menu for Notebook Notification modes
+    const nbNotifyMenu = new TooltipMenuSvg({ commands: app.commands });
+    nbNotifyMenu.addClass('jp-notify-menu');
+    nbNotifyMenu.title.label = trans.__('Notebook Notification');
+
+    // Menu items will be built dynamically when the menu is opened
+
+    // Helper function to update the cell toolbar button on metadata change
+    function updateCellToolbarButton(button: ToolbarButton, cell: ICellModel) {
+      const metadata = cell.getMetadata(NOTIFY_METADATA_KEY) as
+        | INotifyMetadata
+        | undefined;
+      const modeId = metadata?.mode ?? notifySettings.defaultMode;
+      const newIcon = MODES[modeId].icon;
+
+      // Replace the tooltip
+      let tooltip = MODES[modeId].label;
+      let threshold =
+        modeId === 'default'
+          ? metadata?.[CELL_DEFAULT_THRESHOLD_KEY]
+          : modeId === 'custom-timeout'
+          ? metadata?.[CELL_CUSTOM_TIMEOUT_KEY]
+          : undefined;
+      if (!threshold) {
+        const nbMetadata = tracker.currentWidget?.model?.getMetadata(
+          NOTIFY_METADATA_KEY,
+        ) as Record<string, string> | undefined;
+
+        threshold =
+          modeId === 'default'
+            ? nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY]
+            : modeId === 'custom-timeout'
+            ? nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
+            : undefined;
+      }
+
+      if ((modeId === 'default' || modeId === 'custom-timeout') && threshold) {
+        tooltip += ` (${
+          typeof threshold === 'number' ? `${threshold}s` : threshold
+        })`;
+      }
+      tooltip += '\nClick to change';
+      const jpButton = button.node.querySelector('jp-button');
+      if (jpButton) {
+        jpButton.setAttribute('aria-label', trans.__(tooltip));
+        jpButton.setAttribute('title', trans.__(tooltip));
+      }
+      // Replace the SVG in the button
+      const svgElement = button.node.querySelector('svg');
+      if (svgElement) {
+        svgElement.outerHTML = newIcon.svgstr;
+      } else {
+        // Fallback if no SVG is present
+        button.node.innerHTML = newIcon.svgstr;
+      }
+    }
+
+    // Helper function to update notebook toolbar button on metadata change
+    function updateNbToolbarButton(
+      button: ToolbarButton,
+      notebook: INotebookModel,
+    ) {
+      const metadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
+        | INotifyMetadata
+        | undefined;
+      const modeId = metadata?.mode ?? notifySettings.defaultMode;
+      const newIcon = MODES[modeId].icon;
+      const labelElement = button.node.querySelector(
+        '.jp-ToolbarButtonComponent-label',
+      );
+      if (labelElement) {
+        labelElement.textContent = trans.__(MODES[modeId].label);
+        // Insert caret-down icon after label
+        const caretSpan = document.createElement('span');
+        caretSpan.className = 'jp-notify-toolbar-caret';
+        caretSpan.innerHTML = caretSVG;
+        labelElement.appendChild(caretSpan);
+      }
+      // Replace the SVG in the button
+      const svgElement = button.node.querySelector('svg');
+      if (svgElement) {
+        svgElement.outerHTML = newIcon.svgstr;
+      } else {
+        // Fallback if no SVG is present
+        button.node.innerHTML = newIcon.svgstr;
+      }
+    }
+
+    // Toolbar factory for per-cell toolbar
+    if (toolbarRegistry) {
+      toolbarRegistry.addFactory<NotebookPanel>(
+        'Notebook',
+        'notifyType',
+        args => {
+          const notebook = args.model;
+          if (!notebook) {
+            return new ToolbarButton({});
+          }
+
+          const metadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
+            | INotifyMetadata
+            | undefined;
+          const modeId = metadata?.mode ?? notifySettings.defaultMode;
+          const icon = MODES[modeId].icon;
+          const labelElement = trans.__(MODES[modeId].label);
+
+          const button = new ToolbarButton({
+            label: labelElement,
+            tooltip: trans.__(
+              'Set notification settings for this notebook\nAll newly created cells in this notebook will use this type.',
+            ),
+            icon,
+            onClick: () => {
+              if (nbNotifyMenu.isVisible) {
+                nbNotifyMenu.close();
+              } else {
+                // Update menu items with current notebook's threshold values
+                const nbMetadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
+                  | INotifyMetadata
+                  | undefined;
+                const defaultThreshold =
+                  nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
+                const customThreshold =
+                  nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY];
+                // Clear and rebuild menu with current values
+                nbNotifyMenu.clearItems();
+                Object.entries(MODES).forEach(([modeId, mode]) => {
+                  if (modeId === 'custom-timeout') {
+                    const label = customThreshold
+                      ? `${mode.label} (${customThreshold})`
+                      : mode.label;
+                    nbNotifyMenu.addItem({
+                      command: CommandIDs.setNotebookNotificationMode,
+                      args: {
+                        modeId,
+                        label,
+                        tooltip: mode.info,
+                        checked: nbMetadata
+                          ? modeId === nbMetadata?.mode
+                          : false,
+                      },
+                    });
+                  } else if (modeId === 'default') {
+                    const label = defaultThreshold
+                      ? `${mode.label} (${defaultThreshold})`
+                      : mode.label;
+                    nbNotifyMenu.addItem({
+                      command: CommandIDs.setNotebookNotificationMode,
+                      args: {
+                        modeId,
+                        label,
+                        tooltip: mode.info,
+                        checked: nbMetadata
+                          ? modeId === nbMetadata?.mode
+                          : false,
+                      },
+                    });
+                  } else {
+                    nbNotifyMenu.addItem({
+                      command: CommandIDs.setNotebookNotificationMode,
+                      args: {
+                        modeId,
+                        tooltip: mode.info,
+                        checked: nbMetadata
+                          ? modeId === nbMetadata?.mode
+                          : false,
+                      },
+                    });
+                  }
+                });
+
+                // Add Settings Shortcut
+                nbNotifyMenu.addItem({
+                  type: 'separator',
+                });
+                nbNotifyMenu.addItem({
+                  type: 'command',
+                  command: CommandIDs.setNotebookDefaultThreshold,
+                  args: {
+                    tooltip:
+                      'Cells with "default" mode will use this threshold',
+                  },
+                });
+                nbNotifyMenu.addItem({
+                  type: 'command',
+                  command: CommandIDs.setNotebookCustomTimeout,
+                  args: {
+                    tooltip:
+                      'Cells with "custom-timeout" mode will use this timeout',
+                  },
+                });
+
+                const rect = button.node.getBoundingClientRect();
+                nbNotifyMenu.open(rect.right, rect.bottom, {
+                  horizontalAlignment: 'right',
+                });
+              }
+            },
+          });
+          button.addClass(NB_TOOLBAR_NOTIFICATION_CLASS);
+
+          // Connect metadataChanged signal to update the icon dynamically
+          notebook.metadataChanged.connect(() => {
+            updateNbToolbarButton(button, notebook);
+          });
+
+          return button;
+        },
+      );
+
+      toolbarRegistry.addFactory<Cell>('Cell', 'cellNotifyMenu', args => {
+        const cell = args.model;
+
+        const metadata = cell.getMetadata(NOTIFY_METADATA_KEY) as
+          | INotifyMetadata
+          | undefined;
+        const modeId = metadata?.mode ?? notifySettings.defaultMode; // Fallback to default if metadata is unset
+        let tooltip = MODES[modeId].label;
+        let threshold =
+          modeId === 'default'
+            ? metadata?.[CELL_DEFAULT_THRESHOLD_KEY]
+            : modeId === 'custom-timeout'
+            ? metadata?.[CELL_CUSTOM_TIMEOUT_KEY]
+            : undefined;
+        if (!threshold) {
+          const nbMetadata = tracker.currentWidget?.model?.getMetadata(
+            NOTIFY_METADATA_KEY,
+          ) as Record<string, string> | undefined;
+
+          threshold =
+            modeId === 'default'
+              ? nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY]
+              : modeId === 'custom-timeout'
+              ? nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
+              : undefined;
+        }
+        if (
+          (modeId === 'default' || modeId === 'custom-timeout') &&
+          threshold
+        ) {
+          tooltip += ` (${threshold})`;
+        }
+        tooltip += '\nClick to change';
+        // Create the button with the correct initial icon
+        const button = new ToolbarButton({
+          tooltip: trans.__(tooltip),
+          icon: MODES[modeId].icon, // Set initial icon based on current metadata
+          onClick: () => {
+            if (cellNotifyMenu.isVisible) {
+              cellNotifyMenu.close();
+            } else {
+              const currentWidget = tracker.currentWidget;
+              if (!currentWidget || !currentWidget.content.activeCell) {
+                return;
+              }
+
+              const activeCell = currentWidget.content.activeCell.model;
+              const cellMetadata = activeCell.getMetadata(
+                NOTIFY_METADATA_KEY,
+              ) as INotifyMetadata | undefined;
+              const nbMetadata = currentWidget.model?.getMetadata(
+                NOTIFY_METADATA_KEY,
+              ) as INotifyMetadata | undefined;
+
+              const cellDefaultThreshold =
+                cellMetadata?.[CELL_DEFAULT_THRESHOLD_KEY];
+              const cellCustomTimeout = cellMetadata?.[CELL_CUSTOM_TIMEOUT_KEY];
+              const nbDefaultThreshold =
+                nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
+              const nbCustomTimeout = nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY];
+
+              // Clear and rebuild menu with current values
+              cellNotifyMenu.clearItems();
+
+              Object.entries(MODES).forEach(([modeId, mode]) => {
+                if (modeId === 'custom-timeout') {
+                  const subMenu = new TooltipMenuSvg({
+                    commands: app.commands,
+                  });
+                  subMenu.title.icon = mode.icon;
+                  TIMEOUT_OPTIONS.forEach(option => {
+                    if (option.value === 'default') {
+                      const label = `${option.label} (${nbCustomTimeout})`;
+                      subMenu.addItem({
+                        command: CommandIDs.setNotificationMode,
+                        args: {
+                          modeId: 'custom-timeout',
+                          label,
+                          noIcon: true,
+                        },
+                      });
+                    } else if (option.value === 'custom') {
+                      subMenu.addItem({
+                        command: CommandIDs.setCustomTimeout,
+                      });
+                    } else {
+                      subMenu.addItem({
+                        command: CommandIDs.setNotificationMode,
+                        args: {
+                          modeId: 'custom-timeout',
+                          threshold: option.value,
+                          label: option.label,
+                          noIcon: true,
+                        },
+                      });
+                    }
+                  });
+                  const displayTimeout = cellCustomTimeout || nbCustomTimeout;
+                  const label = displayTimeout
+                    ? `${mode.label} (${displayTimeout})`
+                    : mode.label;
+                  subMenu.title.label = label;
+                  cellNotifyMenu.addItem({
+                    type: 'submenu',
+                    submenu: subMenu,
+                    args: {
+                      tooltip: mode.info,
+                      checked: cellMetadata
+                        ? modeId === cellMetadata?.mode
+                        : false,
+                    },
+                  });
+                } else if (modeId === 'default') {
+                  const displayThreshold =
+                    cellDefaultThreshold || nbDefaultThreshold;
+                  const label = displayThreshold
+                    ? `${mode.label} (${displayThreshold})`
+                    : mode.label;
+                  cellNotifyMenu.addItem({
+                    command: CommandIDs.setNotificationMode,
+                    args: {
+                      modeId,
+                      label,
+                      tooltip: mode.info,
+                      checked: cellMetadata
+                        ? modeId === cellMetadata?.mode
+                        : false,
+                    },
+                  });
+                } else {
+                  cellNotifyMenu.addItem({
+                    command: CommandIDs.setNotificationMode,
+                    args: {
+                      modeId,
+                      tooltip: mode.info,
+                      checked: cellMetadata
+                        ? modeId === cellMetadata?.mode
+                        : false,
+                    },
+                  });
+                }
+              });
+
+              // Add Settings Shortcut
+              cellNotifyMenu.addItem({
+                type: 'separator',
+              });
+              cellNotifyMenu.addItem({
+                type: 'command',
+                command: CommandIDs.openNotificationSettings,
+                args: {
+                  tooltip: 'Open Notification Settings',
+                },
+              });
+
+              const rect = button.node.getBoundingClientRect();
+              cellNotifyMenu.open(rect.right, rect.bottom, {
+                horizontalAlignment: 'right',
+              });
+            }
+          },
+        });
+
+        // Connect metadataChanged signal to update the icon dynamically
+        cell.metadataChanged.connect(() => {
+          updateCellToolbarButton(button, cell);
+        });
+
+        return button;
+      });
+    }
+  },
 };
-
-/**
- * Extension definition.
- */
-const extension: IRenderMime.IExtension = {
-  id: 'desktop-notify:plugin',
-  rendererFactory,
-  rank: 0,
-  dataType: 'json',
-};
-
-console.log('jupyterlab-notify render activated');
-
-export default extension;
+export default plugin;

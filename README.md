@@ -5,77 +5,102 @@
 
 JupyterLab extension to notify cell completion
 
-![notify-extension-in-action](https://github.com/deshaw/jupyterlab-notify/blob/main/docs/notify-screenshot.png?raw=true)
-
-This is inspired by the notebook version [here](https://github.com/ShopRunner/jupyter-notify).
-
 ## Usage
 
-### Register magics
+The `jupyterlab-notify` extension allows you to receive notifications about cell execution results in JupyterLab. Notifications are configured through cell metadata or the JupyterLab interface, providing seamless integration and easier management of notification preferences. Notifications can be sent via desktop pop-ups, Slack messages, or emails, depending on your configuration.
 
-```python
-%load_ext jupyterlab_notify
+> [!NOTE]
+> JupyterLab Notify v2 supports `jupyter-server-nbmodel`(>= v0.1.1a2), enabling notifications to work even after the browser has been closed. To enable browser-less notification support, install JupyterLab Notify with server-side execution dependencies using:
+>
+> ```bash
+> pip install jupyterlab-notify[server-side-execution]
+> ```
+>
+> JupyterLab Notify v2 requires execution timing data, so it automatically sets `record_timing` to true in the notebook settings.
+
+### Configuration
+
+To configure the **jupyterlab-notify** extension for Slack and email notifications, create a file named `jupyter_notify_config.json` and place it in a directory listed under the `config` section of `jupyter --paths` (e.g., `~/.jupyter/jupyter_notify_config.json`). This file defines settings for the `NotificationConfig` class.
+
+#### Sample Configuration File
+
+Here’s an example configuration enabling Slack and email notifications:
+
+```json
+{
+  "NotificationConfig": {
+    "email": "example@domain.com",
+    "slack_token": "xoxb-abc123-your-slack-token",
+    "slack_user_id": "U98765432"
+  }
+}
 ```
 
-### Notify completion of single cell:
+- **`slack_token`**: A Slack bot token used to send notifications to your Slack workspace.
 
-```python
-%%notify
-import time
-time.sleep(1)
-```
+  - **How to get it**: See [Slack API Quickstart](https://api.slack.com/quickstart) to create a bot and obtain a token.
+  - **Required Bot Token Scopes**: Your Slack app must have the following OAuth scopes granted under **OAuth & Permissions → Bot Token Scopes** in the [Slack API dashboard](https://api.slack.com/apps):
 
-### Mail output upon completion (with optional title for successfull execution)
+    | Scope               | Purpose                                                                             |
+    | ------------------- | ----------------------------------------------------------------------------------- |
+    | `chat:write`        | Post messages to channels or DMs the bot is a member of                             |
+    | `chat:write.public` | Post to public channels without the bot needing to join first                       |
+    | `im:write`          | Open direct message conversations with users (required when `slack_user_id` is set) |
 
-```python
-%%notify --mail --success 'Long-running cell in <foo> notebook is done!'
-time.sleep(1)
-```
+- **`slack_channel_name`**: The name of the Slack channel (e.g., `"notifications"`) where messages will be posted.
+- **`email`**: The email address to receive notifications.
+  - **Note**: Requires an SMTP server. For setup help, see [this SMTP guide](https://mailtrap.io/blog/setup-smtp-server/).
 
-**Note:** Mail requires/assumes that you have an SMTP server running on "localhost" - refer [SMTP doc](https://docs.python.org/3/library/smtplib.html#smtplib.SMTP.connect) for more details.
-In case this assumption does not hold true for you, please open an issue with relevant details.
+#### Additional Configuration Options
 
-### Failure scenarios
+Beyond the commonly used settings above, the following options are available for advanced use:
 
-```python
-%%notify -f 'Long-running cell in <foo> notebook failed'
-raise ValueError
-```
+- **`slack_user_id`**: A Slack user ID for sending direct messages instead of channel posts (e.g., `"U12345678"`).
+- **`smtp_class`**: Fully qualified name of the SMTP class (default: `"smtplib.SMTP"`).
+- **`smtp_args`**: Arguments for the SMTP class constructor, as a string (default: `["localhost"]`).
 
-### Threshold-based notifications (unit in seconds)
+These settings allow for customization, such as using a custom SMTP server or changing the SMTP port from the default `25` to others (e.g., `["localhost", 125]`), or targeting a specific Slack channel or user.
 
-```python
-%notify_all --threshold 1
-time.sleep(1)
-```
+### Notification Modes
 
-Once enabled, `notify_all` will raise a notification for cells that either exceed the given threshold or raise exception. This ability can also be used to check if/when all cells in a notebook completes execution. For instance,
+You can control when notifications are sent by setting a mode for each cell. Modes can be configured through the JupyterLab interface by clicking on the bell icon in the cell toolbar.
 
-```python
-# In first cell
-%notify_all -t 86400 -f 'Notebook execution failed'
-# ...
-# ...
-# In last cell
-%%notify -s 'Notebook execution completed'
-```
+![image](https://github.com/darshan808/jupyterlab-notify/blob/v2-test/docs/celltoolbar-menu-screenshot.png?raw=true)
 
-### Disable notifications
+**Supported modes include:**
 
-```python
-%notify_all --disable
-time.sleep(1)
-```
+- `default`: Notification is sent only if cell execution exceeds the threshold time (default: 30 seconds). No notification if execution time is below the threshold.
+- `never`: Disables notifications for the cell.
+- `on-error`: Sends a notification only if the cell execution fails with an error.
+- `custom-timeout`: Sends a notification as soon as the cell-execution exceeds a timeout value specified for that cell. Users can either choose a pre-existing timeout value or set a custom one.
 
-### Learn more
+### Default Threshold
 
-```python
-%%notify?
-```
+Configure the default threshold value in JupyterLab’s settings:
 
-```python
-%notify_all?
-```
+1. Go to Settings Editor.
+2. Select Execution Notifications.
+3. Set "Threshold for default notifications": 5 (in seconds) to apply to cells using the `default` mode.
+
+### Desktop Notifications
+
+Desktop notifications are enabled by default and appear as pop-up alerts on your system.
+
+![image](https://github.com/darshan808/jupyterlab-notify/blob/v2-test/docs/desktop-notification.png?raw=true)
+
+### Slack Notifications
+
+Slack notifications are sent to the configured channel, requiring the setup described in the Configuration section.
+
+### Email Notifications
+
+Email notifications are sent to the configured email address, also requiring the setup from the Configuration section.
+
+#### Configuration warning
+
+If your email or Slack notifications are not configured but you attempt to enable them through the settings editor, a warning will be displayed when you try to execute a cell in the JupyterLab interface.
+
+![image](https://github.com/darshan808/jupyterlab-notify/blob/v2-test/docs/configuration-warning-screenshot.png?raw=true)
 
 ## Troubleshoot
 
@@ -97,6 +122,12 @@ To install this package with [`pip`](https://pip.pypa.io/en/stable/) run
 pip install jupyterlab_notify
 ```
 
+To install with server-side execution dependencies run
+
+```bash
+pip install jupyterlab_notify[server-side-execution]
+```
+
 ## Contributing
 
 ### Development install
@@ -112,8 +143,16 @@ The `jlpm` command is JupyterLab's pinned version of
 # Change directory to the jupyterlab_notify directory
 # Install package in development mode
 pip install -e .
+
+# If you need server-side execution dependencies, install with:
+pip install -e .[server-side-execution]
+
+# If you want to install test dependencies as well, use:
+pip install -e .[tests]
+
 # Link your development version of the extension with JupyterLab
 jupyter-labextension develop . --overwrite
+
 # Rebuild extension Typescript source after making changes
 jlpm run build
 ```
@@ -183,6 +222,8 @@ pip uninstall jupyterlab_notify
 
 ## History
 
+The initial version of this extension was inspired by the notebook version [here](https://github.com/ShopRunner/jupyter-notify).
+
 This plugin was contributed back to the community by the [D. E. Shaw group](https://www.deshaw.com/).
 
 <p align="center">
@@ -206,4 +247,4 @@ This CLA is in place to protect all users of this project.
 [github-status-image]: https://github.com/deshaw/jupyterlab-notify/workflows/Build/badge.svg
 [github-status-url]: https://github.com/deshaw/jupyterlab-notify/actions?query=workflow%3ABuild
 [binder-image]: https://mybinder.org/badge_logo.svg
-[binder-url]: https://mybinder.org/v2/gh/deshaw/jupyterlab-notify.git/main?urlpath=lab%2Ftree%2Fnotebooks%2Findex.ipynb
+[binder-url]: https://mybinder.org/v2/gh/deshaw/jupyterlab-notify.git/main?urlpath=lab%2Ftree%2Fnotebooks%2FNotify.ipynb

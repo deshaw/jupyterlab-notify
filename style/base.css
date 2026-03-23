@@ -1,5 +1,85 @@
-/*
-    See the JupyterLab Developer Guide for useful CSS Patterns:
+:root {
+  --jp-notify-highlight-color: #fff3cd;
+}
 
-    https://jupyterlab.readthedocs.io/en/stable/developer/css.html
-*/
+[data-jp-theme-light='false'] {
+  --jp-notify-highlight-color: #464621;
+}
+
+.jp-notify-highlight {
+  background-color: var(--jp-notify-highlight-color) !important;
+}
+
+/* Cell Toolbar menu to select the Notification mode */
+.jp-notify-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.jp-Toolbar-notification-mode svg {
+  margin-right: 5px;
+}
+
+.jp-notify-menu .lm-Menu-itemIcon > svg {
+  vertical-align: sub;
+}
+
+.jp-notify-toolbar-caret {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.jp-notify-time-input-dialog-body {
+  padding: 16px;
+  min-width: 300px;
+}
+
+.jp-notify-time-input-label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.jp-notify-time-input-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.jp-notify-time-input-field {
+  flex: 1;
+  padding: 4px 6px;
+}
+
+.jp-notify-time-unit-select {
+  font-family: var(--jp-ui-font-family);
+  cursor: pointer;
+  min-width: 100px;
+  padding: 3px;
+}
+
+.jp-notify-time-input-error {
+  color: var(--jp-error-color1);
+  font-size: var(--jp-ui-font-size0);
+  margin-top: 4px;
+}
+
+.jp-notify-checkbox-container {
+  display: flex;
+  margin-top: 12px;
+}
+
+.jp-notify-checkbox-label {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.jp-notify-checkbox-input {
+  margin: 0;
+}
+
+.jp-notify-check-icon {
+  vertical-align: middle;
+}
