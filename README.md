@@ -65,7 +65,7 @@ These settings allow for customization, such as using a custom SMTP server or ch
 
 You can control when notifications are sent by setting a mode for each cell. Modes can be configured through the JupyterLab interface by clicking on the bell icon in the cell toolbar.
 
-![image](https://github.com/darshan808/jupyterlab-notify/blob/v2-test/docs/celltoolbar-menu-screenshot.png?raw=true)
+![image](https://github.com/deshaw/jupyterlab-notify/blob/main/docs/celltoolbar-menu-screenshot.png?raw=true)
 
 **Supported modes include:**
 
@@ -86,7 +86,7 @@ Configure the default threshold value in JupyterLab’s settings:
 
 Desktop notifications are enabled by default and appear as pop-up alerts on your system.
 
-![image](https://github.com/darshan808/jupyterlab-notify/blob/v2-test/docs/desktop-notification.png?raw=true)
+![image](https://github.com/deshaw/jupyterlab-notify/blob/main/docs/desktop-notification.png?raw=true)
 
 ### Slack Notifications
 
@@ -100,7 +100,7 @@ Email notifications are sent to the configured email address, also requiring the
 
 If your email or Slack notifications are not configured but you attempt to enable them through the settings editor, a warning will be displayed when you try to execute a cell in the JupyterLab interface.
 
-![image](https://github.com/darshan808/jupyterlab-notify/blob/v2-test/docs/configuration-warning-screenshot.png?raw=true)
+![image](https://github.com/deshaw/jupyterlab-notify/blob/main/docs/configuration-warning-screenshot.png?raw=true)
 
 ## Troubleshoot
 
