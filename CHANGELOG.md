@@ -1,4 +1,4 @@
-## [3.0.0rc1](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.2...v3.0.0rc1) (UNRELEASED)
+## [3.0.0rc1](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.2...v3.0.0rc1) (2026-04-07)
 
 ## Changed
 
