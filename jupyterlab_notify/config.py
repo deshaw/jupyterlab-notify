@@ -83,8 +83,9 @@ class NotificationConfig(Configurable):
         config=True,
     )
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, config=None, logger=None, **kwargs):
+        super().__init__(config=config, **kwargs)
+        self.log = logger
         self.smtp_instance = None
         self._setup_smtp_instance()
 
@@ -95,7 +96,8 @@ class NotificationConfig(Configurable):
             self.smtp_instance = self._create_smtp_instance(smtp_class)
             self._validate_smtp_instance(self.smtp_instance)
         except SMTPConfigurationError as e:
-            print(f"SMTP Configuration Error: {str(e)}")
+            if self.log:
+                self.log.error(f"SMTP Configuration Error: {str(e)}")
 
     def _import_smtp_class(self):
         try:
