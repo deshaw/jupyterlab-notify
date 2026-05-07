@@ -1122,6 +1122,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
           const icon = MODES[modeId].icon;
           const labelElement = trans.__(MODES[modeId].label);
 
+          let nbCaptureHandler: ((e: MouseEvent) => void) | null = null;
+          const removeNbCapture = () => {
+            if (nbCaptureHandler) {
+              document.removeEventListener('mousedown', nbCaptureHandler, true);
+              nbCaptureHandler = null;
+            }
+          };
           const button = new ToolbarButton({
             label: labelElement,
             tooltip: trans.__(
@@ -1130,6 +1137,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             icon,
             onClick: () => {
               if (nbNotifyMenu.isVisible) {
+                removeNbCapture();
                 nbNotifyMenu.close();
               } else {
                 // Update menu items with current notebook's threshold values
@@ -1209,6 +1217,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 });
 
                 const rect = button.node.getBoundingClientRect();
+                // Register before menu.open() so our handler queues before Lumino's.
+                // stopImmediatePropagation() prevents Lumino from closing the menu
+                // when the user clicks the button while the menu is open.
+                nbCaptureHandler = (e: MouseEvent) => {
+                  if (!nbNotifyMenu.isVisible) {
+                    removeNbCapture();
+                    return;
+                  }
+                  if (button.node.contains(e.target as Node)) {
+                    e.stopImmediatePropagation();
+                  }
+                };
+                document.addEventListener('mousedown', nbCaptureHandler, true);
                 nbNotifyMenu.open(rect.right, rect.bottom, {
                   horizontalAlignment: 'right',
                 });
@@ -1259,12 +1280,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
           tooltip += ` (${threshold})`;
         }
         tooltip += '\nClick to change';
-        // Create the button with the correct initial icon
+        let cellCaptureHandler: ((e: MouseEvent) => void) | null = null;
+        const removeCellCapture = () => {
+          if (cellCaptureHandler) {
+            document.removeEventListener('mousedown', cellCaptureHandler, true);
+            cellCaptureHandler = null;
+          }
+        };
         const button = new ToolbarButton({
           tooltip: trans.__(tooltip),
-          icon: MODES[modeId].icon, // Set initial icon based on current metadata
+          icon: MODES[modeId].icon,
           onClick: () => {
             if (cellNotifyMenu.isVisible) {
+              removeCellCapture();
               cellNotifyMenu.close();
             } else {
               const currentWidget = tracker.currentWidget;
@@ -1382,6 +1410,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
               });
 
               const rect = button.node.getBoundingClientRect();
+              // Register before menu.open() so our handler queues before Lumino's.
+              cellCaptureHandler = (e: MouseEvent) => {
+                if (!cellNotifyMenu.isVisible) {
+                  removeCellCapture();
+                  return;
+                }
+                if (button.node.contains(e.target as Node)) {
+                  e.stopImmediatePropagation();
+                }
+              };
+              document.addEventListener('mousedown', cellCaptureHandler, true);
               cellNotifyMenu.open(rect.right, rect.bottom, {
                 horizontalAlignment: 'right',
               });
