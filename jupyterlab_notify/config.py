@@ -1,3 +1,4 @@
+from getpass import getuser
 from pathlib import Path
 from traitlets.config import Configurable
 from traitlets import Unicode, default, Any
@@ -58,7 +59,7 @@ class NotificationConfig(Configurable):
     email = Unicode(
         help="User's email for notifications",
         allow_none=True,
-        default_value=None,
+        default_value=f"{getuser()}",
         config=True,
     )
 
