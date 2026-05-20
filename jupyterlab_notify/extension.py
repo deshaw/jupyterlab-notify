@@ -22,7 +22,7 @@ class NotifyExtension(ExtensionApp):
 
     def _init_config(self) -> None:
         """Initialize and set up the notification configuration."""
-        self._config = NotificationConfig(config=self.config)
+        self._config = NotificationConfig(config=self.config, log=self.log)
         self.slack_client = None
         self.slack_imported = False
 
