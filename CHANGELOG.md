@@ -1,3 +1,12 @@
+## [3.0.0](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.2...v3.0.0) (2026-05-25)
+
+Compared to `3.0.0rc1`:
+
+## Fixed
+  - Prevent toolbar menu from reopening when clicked while open
+  - Fix logging, docs and configuration defaults
+  - Update version references in README
+
 ## [3.0.0rc1](https://github.com/deshaw/jupyterlab-notify/compare/v2.0.2...v3.0.0rc1) (2026-04-07)
 
 ## Changed
