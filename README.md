@@ -10,21 +10,28 @@ JupyterLab extension to notify cell completion
 The `jupyterlab-notify` extension allows you to receive notifications about cell execution results in JupyterLab. Notifications are configured through cell metadata or the JupyterLab interface, providing seamless integration and easier management of notification preferences. Notifications can be sent via desktop pop-ups, Slack messages, or emails, depending on your configuration.
 
 > [!NOTE]
-> JupyterLab Notify v2 supports `jupyter-server-nbmodel`(>= v0.1.1a2), enabling notifications to work even after the browser has been closed. To enable browser-less notification support, install JupyterLab Notify with server-side execution dependencies using:
+> JupyterLab Notify v3 supports `jupyter-server-nbmodel`(>= v0.1.1a2), enabling notifications to work even after the browser has been closed. To enable browser-less notification support, install JupyterLab Notify with server-side execution dependencies using:
 >
 > ```bash
 > pip install jupyterlab-notify[server-side-execution]
 > ```
 >
-> JupyterLab Notify v2 requires execution timing data, so it automatically sets `record_timing` to true in the notebook settings.
+> JupyterLab Notify v3 requires execution timing data, so it automatically sets `record_timing` to true in the notebook settings.
 
 ### Configuration
 
-To configure the **jupyterlab-notify** extension for Slack and email notifications, create a file named `jupyter_notify_config.json` and place it in a directory listed under the `config` section of `jupyter --paths` (e.g., `~/.jupyter/jupyter_notify_config.json`). This file defines settings for the `NotificationConfig` class.
+To configure the **jupyterlab-notify** extension for Slack and email notifications, create a configuration file and place it in a directory listed under the `config` section of `jupyter --paths` (run `jupyter --paths` to see the available locations).
+
+Two configuration file formats are supported:
+
+- **JSON** (`jupyter_notify_config.json`) — simple key/value format.
+- **Python** (`jupyter_notify_config.py`) — uses Jupyter’s `traitlets`-based config system.
+
+Both files define settings for the `NotificationConfig` class. You only need one.
 
 #### Sample Configuration File
 
-Here’s an example configuration enabling Slack and email notifications:
+**JSON** (`~/.jupyter/jupyter_notify_config.json`):
 
 ```json
 {
@@ -34,6 +41,20 @@ Here’s an example configuration enabling Slack and email notifications:
     "slack_user_id": "U98765432"
   }
 }
+```
+
+**Python** (`~/.jupyter/jupyter_notify_config.py`):
+
+```python
+# Configuration file for jupyter-notify extension.
+
+c = get_config()  # noqa
+
+c.NotificationConfig.email = "example@domain.com"
+c.NotificationConfig.slack_token = "xoxb-abc123-your-slack-token"
+c.NotificationConfig.slack_user_id = "U98765432"
+# Example: use a custom SMTP server on a non-default port
+c.NotificationConfig.smtp_args = ["localhost", 1025]
 ```
 
 - **`slack_token`**: A Slack bot token used to send notifications to your Slack workspace.
