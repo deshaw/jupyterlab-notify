@@ -130,7 +130,7 @@ class OutputWidget extends Widget implements IRenderMime.IRenderer {
       // Ensure notebook is fully activated
       await new Promise(resolve => setTimeout(resolve, 100));
       this.navigateToCellInNotebook(targetNotebook, cellId);
-    } catch (error) {
+    } catch {
       // Silently ignore errors
     }
   }

@@ -4,6 +4,7 @@ import {
   JupyterFrontEndPlugin,
 } from '@jupyterlab/application';
 import { Kernel, KernelMessage } from '@jupyterlab/services';
+import { ReadonlyJSONObject } from '@lumino/coreutils';
 import {
   INotebookModel,
   INotebookTracker,
@@ -51,6 +52,7 @@ import {
   INotifyPayload,
   ICellNotification,
   ModeId,
+  ModeIds,
   NotifyType,
   TIMEOUT_OPTIONS,
   NOTIFY_METADATA_KEY,
@@ -71,29 +73,6 @@ namespace CommandIDs {
   export const setNotebookNotificationMode =
     'notify:set-notebook-notification-mode';
 }
-
-const MODES: Record<ModeId, IMode & { info: string }> = {
-  default: {
-    label: 'Default',
-    icon: bellOutlineIcon,
-    info: 'Notify after cell finishes execution if it exceeds the default threshold.',
-  },
-  never: {
-    label: 'Never',
-    icon: bellOffIcon,
-    info: 'Never send notifications for this cell.',
-  },
-  'on-error': {
-    label: 'On Error',
-    icon: bellAlertIcon,
-    info: 'Notify only if cell execution fails.',
-  },
-  'custom-timeout': {
-    label: 'Custom Timeout',
-    icon: bellClockIcon,
-    info: 'Notify if a cell is still running after a set timeout.',
-  },
-};
 
 /**
  * Main plugin definition
@@ -510,14 +489,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const state: NotifyType = !success
         ? 'failed'
         : triggeredViaTimeout
-        ? 'timeout'
-        : 'completed';
+          ? 'timeout'
+          : 'completed';
       const message =
         state === 'timeout'
           ? 'Cell execution timeout reached'
           : state === 'completed'
-          ? notifySettings.successMessage
-          : notifySettings.failureMessage;
+            ? notifySettings.successMessage
+            : notifySettings.failureMessage;
       const executionCount =
         typeof payload.execution_count === 'number'
           ? payload.execution_count
@@ -745,9 +724,56 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
     const trans = (translator ?? nullTranslator).load('jupyterlab-notify');
 
+    // Defined here rather than at module scope so the labels and descriptions
+    // can be written as literals at the `trans.__` call site, which is what the
+    // translation string extractor reads.
+    const MODES: Record<ModeId, IMode & { info: string }> = {
+      default: {
+        label: trans.__('Default'),
+        icon: bellOutlineIcon,
+        info: trans.__(
+          'Notify after cell finishes execution if it exceeds the default threshold.',
+        ),
+      },
+      never: {
+        label: trans.__('Never'),
+        icon: bellOffIcon,
+        info: trans.__('Never send notifications for this cell.'),
+      },
+      'on-error': {
+        label: trans.__('On Error'),
+        icon: bellAlertIcon,
+        info: trans.__('Notify only if cell execution fails.'),
+      },
+      'custom-timeout': {
+        label: trans.__('Custom Timeout'),
+        icon: bellClockIcon,
+        info: trans.__(
+          'Notify if a cell is still running after a set timeout.',
+        ),
+      },
+    };
+
+    // Argument schemas shared by the commands below, surfaced through
+    // `CommandRegistry.describedBy`.
+    const modeIdArg: ReadonlyJSONObject = {
+      type: 'string',
+      enum: [...ModeIds],
+      description: 'Notification mode to apply.',
+    };
+    const labelArg: ReadonlyJSONObject = {
+      type: 'string',
+      description: 'Overrides the label shown for the command in menus.',
+    };
+    const toolbarArg: ReadonlyJSONObject = {
+      type: 'boolean',
+      description: 'Whether the command is being rendered in a toolbar.',
+    };
+
     app.commands.addCommand(CommandIDs.openNotificationSettings, {
       label: trans.__('Settings..'),
       icon: settingsIcon,
+      describedBy: { args: null },
       execute: () => {
         app.commands.execute('settingeditor:open', {
           query: 'Execution Notifications',
@@ -764,6 +790,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
         return MODES[modeId].label;
       },
       icon: args => MODES[args.modeId as ModeId].icon,
+      describedBy: {
+        args: {
+          type: 'object',
+          properties: { modeId: modeIdArg, label: labelArg },
+          required: ['modeId'],
+        },
+      },
       execute: args => {
         const modeId = args.modeId;
         const notebook = tracker.currentWidget;
@@ -787,6 +820,25 @@ const plugin: JupyterFrontEndPlugin<void> = {
       },
       icon: args =>
         args.noIcon ? undefined : MODES[args.modeId as ModeId].icon,
+      describedBy: {
+        args: {
+          type: 'object',
+          properties: {
+            modeId: modeIdArg,
+            label: labelArg,
+            threshold: {
+              type: 'string',
+              description:
+                'Threshold to store alongside the mode, e.g. "120s". Only used by the "default" and "custom-timeout" modes.',
+            },
+            noIcon: {
+              type: 'boolean',
+              description: 'Render the command without its mode icon.',
+            },
+          },
+          required: ['modeId'],
+        },
+      },
       execute: args => {
         const modeId = args.modeId as ModeId;
         let threshold = args.threshold as string | undefined; // Stored as string, e.g., "120s"
@@ -802,8 +854,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         // Get existing metadata to preserve thresholds
         const existingMetadata = cell.model.getMetadata(NOTIFY_METADATA_KEY) as
-          | INotifyMetadata
-          | undefined;
+          INotifyMetadata | undefined;
 
         const metadata: INotifyMetadata = { mode: modeId };
 
@@ -852,6 +903,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
       label: trans.__('Set Custom Timeout'),
       caption: trans.__('Set Notebook Custom Timeout'),
       icon: args => (args.toolbar ? bellClockIcon : undefined),
+      describedBy: {
+        args: {
+          type: 'object',
+          properties: { toolbar: toolbarArg },
+        },
+      },
       execute: async () => {
         const current = tracker.currentWidget;
         if (!current || !current.content || !current.model) {
@@ -868,11 +925,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
           }
         }
         const timeoutOptions: ITimeoutPromptOptions = {
-          title: 'Set Notebook Custom Timeout',
-          label: 'Custom timeout value with unit:',
+          title: trans.__('Set Notebook Custom Timeout'),
+          label: trans.__('Custom timeout value with unit:'),
           placeholder: '30',
-          errorMessage:
+          errorMessage: trans.__(
             'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+          ),
           defaultValue: value,
           defaultUnit: unit,
         };
@@ -912,6 +970,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
       label: trans.__('Set Default Threshold'),
       caption: trans.__('Set Notebook Default Threshold'),
       icon: args => (args.toolbar ? bellOutlineIcon : undefined),
+      describedBy: {
+        args: {
+          type: 'object',
+          properties: { toolbar: toolbarArg },
+        },
+      },
       execute: async () => {
         const current = tracker.currentWidget;
         if (!current || !current.content || !current.model) {
@@ -928,11 +992,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
           }
         }
         const thresholdOptions: ITimeoutPromptOptions = {
-          title: 'Set Notebook Default Threshold',
-          label: 'Default Threshold value with unit:',
+          title: trans.__('Set Notebook Default Threshold'),
+          label: trans.__('Default Threshold value with unit:'),
           placeholder: '30',
-          errorMessage:
+          errorMessage: trans.__(
             'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+          ),
           defaultValue: value,
           defaultUnit: unit,
         };
@@ -970,8 +1035,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     app.commands.addCommand(CommandIDs.setCustomTimeout, {
-      caption: 'Set a custom timeout for cell notifications',
+      caption: trans.__('Set a custom timeout for cell notifications'),
       label: trans.__('Custom'),
+      describedBy: { args: null },
       execute: async () => {
         const current = tracker.currentWidget;
         let value: number | undefined = undefined;
@@ -989,11 +1055,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
         const { value: input } = await promptForTimeout(
           {
-            title: 'Set Custom Timeout',
-            label: 'Custom timeout value with unit:',
+            title: trans.__('Set Custom Timeout'),
+            label: trans.__('Custom timeout value with unit:'),
             placeholder: '30',
-            errorMessage:
+            errorMessage: trans.__(
               'Please enter a positive number and select a unit (seconds, minutes, or hours).',
+            ),
             defaultValue: value,
             defaultUnit: unit,
           } as ITimeoutPromptOptions,
@@ -1026,19 +1093,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Helper function to update the cell toolbar button on metadata change
     function updateCellToolbarButton(button: ToolbarButton, cell: ICellModel) {
       const metadata = cell.getMetadata(NOTIFY_METADATA_KEY) as
-        | INotifyMetadata
-        | undefined;
+        INotifyMetadata | undefined;
       const modeId = metadata?.mode ?? notifySettings.defaultMode;
       const newIcon = MODES[modeId].icon;
 
       // Replace the tooltip
-      let tooltip = MODES[modeId].label;
+      const modeLabel = MODES[modeId].label;
       let threshold =
         modeId === 'default'
           ? metadata?.[CELL_DEFAULT_THRESHOLD_KEY]
           : modeId === 'custom-timeout'
-          ? metadata?.[CELL_CUSTOM_TIMEOUT_KEY]
-          : undefined;
+            ? metadata?.[CELL_CUSTOM_TIMEOUT_KEY]
+            : undefined;
       if (!threshold) {
         const nbMetadata = tracker.currentWidget?.model?.getMetadata(
           NOTIFY_METADATA_KEY,
@@ -1048,20 +1114,22 @@ const plugin: JupyterFrontEndPlugin<void> = {
           modeId === 'default'
             ? nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY]
             : modeId === 'custom-timeout'
-            ? nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
-            : undefined;
+              ? nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
+              : undefined;
       }
 
-      if ((modeId === 'default' || modeId === 'custom-timeout') && threshold) {
-        tooltip += ` (${
-          typeof threshold === 'number' ? `${threshold}s` : threshold
-        })`;
-      }
-      tooltip += '\nClick to change';
+      const tooltip =
+        (modeId === 'default' || modeId === 'custom-timeout') && threshold
+          ? trans.__(
+              '%1 (%2)\nClick to change',
+              modeLabel,
+              typeof threshold === 'number' ? `${threshold}s` : threshold,
+            )
+          : trans.__('%1\nClick to change', modeLabel);
       const jpButton = button.node.querySelector('jp-button');
       if (jpButton) {
-        jpButton.setAttribute('aria-label', trans.__(tooltip));
-        jpButton.setAttribute('title', trans.__(tooltip));
+        jpButton.setAttribute('aria-label', tooltip);
+        jpButton.setAttribute('title', tooltip);
       }
       // Replace the SVG in the button
       const svgElement = button.node.querySelector('svg');
@@ -1079,15 +1147,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       notebook: INotebookModel,
     ) {
       const metadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
-        | INotifyMetadata
-        | undefined;
+        INotifyMetadata | undefined;
       const modeId = metadata?.mode ?? notifySettings.defaultMode;
       const newIcon = MODES[modeId].icon;
       const labelElement = button.node.querySelector(
         '.jp-ToolbarButtonComponent-label',
       );
       if (labelElement) {
-        labelElement.textContent = trans.__(MODES[modeId].label);
+        labelElement.textContent = MODES[modeId].label;
         // Insert caret-down icon after label
         const caretSpan = document.createElement('span');
         caretSpan.className = 'jp-notify-toolbar-caret';
@@ -1116,11 +1183,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
           }
 
           const metadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
-            | INotifyMetadata
-            | undefined;
+            INotifyMetadata | undefined;
           const modeId = metadata?.mode ?? notifySettings.defaultMode;
           const icon = MODES[modeId].icon;
-          const labelElement = trans.__(MODES[modeId].label);
+          const labelElement = MODES[modeId].label;
 
           let nbCaptureHandler: ((e: MouseEvent) => void) | null = null;
           const removeNbCapture = () => {
@@ -1142,8 +1208,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
               } else {
                 // Update menu items with current notebook's threshold values
                 const nbMetadata = notebook.getMetadata(NOTIFY_METADATA_KEY) as
-                  | INotifyMetadata
-                  | undefined;
+                  INotifyMetadata | undefined;
                 const defaultThreshold =
                   nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY];
                 const customThreshold =
@@ -1251,16 +1316,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cell = args.model;
 
         const metadata = cell.getMetadata(NOTIFY_METADATA_KEY) as
-          | INotifyMetadata
-          | undefined;
+          INotifyMetadata | undefined;
         const modeId = metadata?.mode ?? notifySettings.defaultMode; // Fallback to default if metadata is unset
-        let tooltip = MODES[modeId].label;
+        const modeLabel = MODES[modeId].label;
         let threshold =
           modeId === 'default'
             ? metadata?.[CELL_DEFAULT_THRESHOLD_KEY]
             : modeId === 'custom-timeout'
-            ? metadata?.[CELL_CUSTOM_TIMEOUT_KEY]
-            : undefined;
+              ? metadata?.[CELL_CUSTOM_TIMEOUT_KEY]
+              : undefined;
         if (!threshold) {
           const nbMetadata = tracker.currentWidget?.model?.getMetadata(
             NOTIFY_METADATA_KEY,
@@ -1270,16 +1334,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
             modeId === 'default'
               ? nbMetadata?.[NOTEBOOK_DEFAULT_THRESHOLD_KEY]
               : modeId === 'custom-timeout'
-              ? nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
-              : undefined;
+                ? nbMetadata?.[NOTEBOOK_CUSTOM_TIMEOUT_KEY]
+                : undefined;
         }
-        if (
-          (modeId === 'default' || modeId === 'custom-timeout') &&
-          threshold
-        ) {
-          tooltip += ` (${threshold})`;
-        }
-        tooltip += '\nClick to change';
+        const tooltip =
+          (modeId === 'default' || modeId === 'custom-timeout') && threshold
+            ? trans.__('%1 (%2)\nClick to change', modeLabel, threshold)
+            : trans.__('%1\nClick to change', modeLabel);
         let cellCaptureHandler: ((e: MouseEvent) => void) | null = null;
         const removeCellCapture = () => {
           if (cellCaptureHandler) {
@@ -1288,7 +1349,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           }
         };
         const button = new ToolbarButton({
-          tooltip: trans.__(tooltip),
+          tooltip,
           icon: MODES[modeId].icon,
           onClick: () => {
             if (cellNotifyMenu.isVisible) {

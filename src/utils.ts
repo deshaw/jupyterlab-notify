@@ -42,6 +42,9 @@ export class TimeInputDialog {
     // Keep showing dialog until valid input or user cancels
     let keepPrompting = false;
     do {
+      // `Dialog` takes ownership of its `body` widget: it adds it to the
+      // dialog's content panel, and `Dialog.dispose()` disposes the whole layout with it.
+      // eslint-disable-next-line jupyter/require-disposable-ownership
       widget = new TimeInputWidget({
         ...options,
         initialInputValid: !keepPrompting,
@@ -358,13 +361,14 @@ export async function promptForTimeout(
   translator?: ITranslator,
 ): Promise<{ value: string | null; applyToAll: boolean }> {
   translator = translator || nullTranslator;
-  const trans = translator.load('jupyterlab');
+  const trans = translator.load('jupyterlab-notify');
   const timeResult = await TimeInputDialog.getText({
     title: options.title,
     label: options.label,
     placeholder: options.placeholder,
     defaultValue: options.defaultValue,
     defaultUnit: options.defaultUnit,
+    translator,
     ...(showCheckbox && {
       checkbox: {
         label: trans.__('Apply to all cells in this notebook'),
@@ -383,8 +387,8 @@ export async function promptForTimeout(
     rawInput === ''
       ? ''
       : ['s', 'm', 'h'].includes(lastChar)
-      ? rawInput
-      : rawInput + 's';
+        ? rawInput
+        : rawInput + 's';
 
   if (!input || !TIMEOUT_PATTERN.test(input)) {
     return { value: null, applyToAll: false };

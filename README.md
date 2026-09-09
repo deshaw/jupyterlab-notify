@@ -13,7 +13,7 @@ The `jupyterlab-notify` extension allows you to receive notifications about cell
 > JupyterLab Notify v3 supports `jupyter-server-nbmodel`(>= v0.1.1a2), enabling notifications to work even after the browser has been closed. To enable browser-less notification support, install JupyterLab Notify with server-side execution dependencies using:
 >
 > ```bash
-> pip install jupyterlab-notify[server-side-execution]
+> pip install "jupyterlab-notify[server-side-execution]"
 > ```
 >
 > JupyterLab Notify v3 requires execution timing data, so it automatically sets `record_timing` to true in the notebook settings.
@@ -146,7 +146,7 @@ pip install jupyterlab_notify
 To install with server-side execution dependencies run
 
 ```bash
-pip install jupyterlab_notify[server-side-execution]
+pip install "jupyterlab_notify[server-side-execution]"
 ```
 
 ## Contributing
@@ -162,17 +162,17 @@ The `jlpm` command is JupyterLab's pinned version of
 ```bash
 # Clone the repo to your local environment
 # Change directory to the jupyterlab_notify directory
-# Install package in development mode
-pip install -e .
+# Install the build tool (jupyter-builder) and JupyterLab itself
+pip install -e ".[dev]"
 
 # If you need server-side execution dependencies, install with:
-pip install -e .[server-side-execution]
+pip install -e ".[server-side-execution]"
 
 # If you want to install test dependencies as well, use:
-pip install -e .[tests]
+pip install -e ".[test]"
 
 # Link your development version of the extension with JupyterLab
-jupyter-labextension develop . --overwrite
+jupyter-builder develop . --overwrite
 
 # Rebuild extension Typescript source after making changes
 jlpm run build
@@ -193,6 +193,18 @@ By default, the `jlpm run build` command generates the source maps for this exte
 
 ```bash
 jupyter lab build --minimize=False
+```
+
+### Endpoint authentication
+
+Every verb method of every handler in `jupyterlab_notify/handlers.py` must carry a
+`@tornado.web.authenticated` decorator, or, if the endpoint is meant to be public, an
+explicit `@allow_unauthenticated`/`@ws_authenticated` decorator from
+`jupyter_server.auth.decorator`. The `Build and publish to PyPI` workflow enforces this
+by running:
+
+```bash
+python .github/scripts/check_auth.py
 ```
 
 ### Uninstall
@@ -234,7 +246,7 @@ This project is released under a [BSD-3-Clause license](https://github.com/desha
 We love contributions! Before you can contribute, please sign and submit this [Contributor License Agreement (CLA)](https://www.deshaw.com/oss/cla).
 This CLA is in place to protect all users of this project.
 
-"Jupyter" is a trademark of the NumFOCUS foundation, of which Project Jupyter is a part.
+"Jupyter" is a trademark of the LF Charities, of which Project Jupyter is a part.
 
 [pypi-url]: https://pypi.org/project/jupyterlab-notify
 [pypi-image]: https://img.shields.io/pypi/v/jupyterlab-notify

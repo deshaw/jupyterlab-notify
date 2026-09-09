@@ -43,7 +43,7 @@ jobs:
       uses: jupyterlab/maintainer-tools/.github/actions/base-setup@95d85449e4f3f352e261221f6529f8ed307f5728 # v1
 
     - name: Install dependencies
-      run: python -m pip install -U "jupyterlab>=4.0.0b0,<5"
+      run: python -m pip install -U "jupyter-builder>=1.2.0,<2"
 
     - name: Lint the extension
       run: |
@@ -58,6 +58,16 @@ jobs:
 
         jupyter server extension list
         jupyter server extension list 2>&1 | grep -ie "jupyterlab_notify.*OK"
+
+    - name: Check that all endpoints are authenticated
+      run: |
+        set -eux
+        python .github/scripts/check_auth.py
+
+    - name: Check the extension against JupyterLab
+      run: |
+        set -eux
+        python -m pip install -U "jupyterlab>=4.0.0b0,<5"
 
         jupyter labextension list
         jupyter labextension list 2>&1 | grep -ie "jupyterlab-notify.*OK"
@@ -90,7 +100,7 @@ jobs:
     - name: Install Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
       with:
-        python-version: '3.9'
+        python-version: '3.10'
         architecture: 'x64'
 
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

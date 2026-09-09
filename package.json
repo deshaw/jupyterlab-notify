@@ -25,8 +25,8 @@
   },
   "scripts": {
     "build": "jlpm build:lib && jlpm build:labextension:dev",
-    "build:labextension": "jupyter labextension build .",
-    "build:labextension:dev": "jupyter labextension build --development True .",
+    "build:labextension": "jupyter-builder build .",
+    "build:labextension:dev": "jupyter-builder build --development True .",
     "build:lib": "tsc --sourceMap",
     "build:lib:prod": "tsc",
     "build:prod": "jlpm clean && jlpm build:lib:prod && jlpm build:labextension",
@@ -36,7 +36,7 @@
     "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
     "clean:lintcache": "rimraf .eslintcache .stylelintcache",
     "eslint": "jlpm eslint:check --fix",
-    "eslint:check": "eslint . --cache --ext .ts,.tsx",
+    "eslint:check": "eslint . --cache",
     "install:extension": "jlpm build",
     "lint": "jlpm stylelint && jlpm prettier && jlpm eslint",
     "lint:check": "jlpm stylelint:check && jlpm prettier:check && jlpm eslint:check",
@@ -47,7 +47,7 @@
     "stylelint": "jlpm stylelint:check --fix",
     "stylelint:check": "stylelint --cache \"style/**/*.css\"",
     "watch": "run-p watch:src watch:labextension",
-    "watch:labextension": "jupyter labextension watch .",
+    "watch:labextension": "jupyter-builder watch .",
     "watch:src": "tsc -w --sourceMap"
   },
   "dependencies": {
@@ -58,27 +58,24 @@
     "@lumino/widgets": "^2.3.0"
   },
   "devDependencies": {
-    "@jupyterlab/builder": "^4.0.0",
+    "@eslint/js": "^9.39.0",
+    "@jupyter/builder": "^1.2.0",
+    "@jupyter/eslint-plugin": "^1.1.0",
     "@types/json-schema": "^7.0.11",
     "@types/react": "^18.0.26",
-    "@typescript-eslint/eslint-plugin": "^5.55.0",
-    "@typescript-eslint/parser": "^5.55.0",
-    "css-loader": "^6.7.3",
-    "eslint": "^8.36.0",
-    "eslint-config-prettier": "^8.7.0",
-    "eslint-plugin-prettier": "^4.2.1",
-    "mkdirp": "^3.0.1",
-    "npm-run-all": "^4.1.5",
-    "prettier": "^2.8.7",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "globals": "^17.0.0",
+    "npm-run-all2": "^7.0.1",
+    "prettier": "^3.6.2",
     "rimraf": "^5.0.0",
-    "source-map-loader": "^4.0.1",
-    "style-loader": "^3.3.2",
-    "stylelint": "^14.9.1",
-    "stylelint-config-prettier": "^9.0.4",
-    "stylelint-config-recommended": "^8.0.0",
-    "stylelint-config-standard": "^26.0.0",
-    "stylelint-prettier": "^2.0.0",
+    "stylelint": "^16.26.1",
+    "stylelint-config-recommended": "^17.0.0",
+    "stylelint-config-standard": "^38.0.0",
+    "stylelint-prettier": "^5.0.3",
     "typescript": "~5.0.2",
+    "typescript-eslint": "^8.46.0",
     "yjs": "^13.5.40"
   },
   "jupyterlab": {
@@ -87,75 +84,11 @@
     "schemaDir": "schema"
   },
   "styleModule": "style/index.js",
-  "eslintIgnore": [
-    "node_modules",
-    "dist",
-    "coverage",
-    "**/*.d.ts",
-    "tests",
-    "**/__tests__",
-    "ui-tests",
-    "style"
-  ],
   "prettier": {
     "singleQuote": true,
     "trailingComma": "all",
     "arrowParens": "avoid",
     "endOfLine": "auto"
-  },
-  "eslintConfig": {
-    "extends": [
-      "eslint:recommended",
-      "plugin:@typescript-eslint/eslint-recommended",
-      "plugin:@typescript-eslint/recommended",
-      "plugin:prettier/recommended"
-    ],
-    "parser": "@typescript-eslint/parser",
-    "parserOptions": {
-      "project": true,
-      "sourceType": "module"
-    },
-    "plugins": [
-      "@typescript-eslint"
-    ],
-    "rules": {
-      "@typescript-eslint/naming-convention": [
-        "error",
-        {
-          "selector": "interface",
-          "format": [
-            "PascalCase"
-          ],
-          "custom": {
-            "regex": "^I[A-Z]",
-            "match": true
-          }
-        }
-      ],
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        {
-          "args": "none"
-        }
-      ],
-      "@typescript-eslint/no-explicit-any": "error",
-      "@typescript-eslint/no-namespace": "off",
-      "@typescript-eslint/no-use-before-define": "off",
-      "@typescript-eslint/quotes": [
-        "error",
-        "single",
-        {
-          "avoidEscape": true,
-          "allowTemplateLiterals": false
-        }
-      ],
-      "curly": [
-        "error",
-        "all"
-      ],
-      "eqeqeq": "error",
-      "prefer-arrow-callback": "error"
-    }
   },
   "stylelint": {
     "extends": [

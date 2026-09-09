@@ -63,16 +63,24 @@ export class BatchNotifier {
     state.buffer = [];
   }
 
-  private async showSingle(data: INotificationData) {
+  /**
+   * Render a notification through the desktop-notify mime renderer.
+   */
+  private async render(data: INotificationData, description: string) {
+    const renderer = this.rendermime.createRenderer(MIME_TYPE);
     try {
       const mimeModel = new MimeModel({
         data: { [MIME_TYPE]: JSON.parse(JSON.stringify(data)) },
       });
-      const renderer = this.rendermime.createRenderer(MIME_TYPE);
       await renderer.renderModel(mimeModel);
     } catch (err) {
-      console.error('Error rendering single notification:', err);
+      console.error(`Error rendering ${description} notification:`, err);
     }
+    renderer.dispose();
+  }
+
+  private async showSingle(data: INotificationData) {
+    await this.render(data, 'single');
   }
 
   private async showBatch(batch: INotificationData[]) {
@@ -97,14 +105,6 @@ export class BatchNotifier {
       },
     };
 
-    try {
-      const mimeModel = new MimeModel({
-        data: { [MIME_TYPE]: JSON.parse(JSON.stringify(summary)) },
-      });
-      const renderer = this.rendermime.createRenderer(MIME_TYPE);
-      await renderer.renderModel(mimeModel);
-    } catch (err) {
-      console.error('Error rendering batched notification:', err);
-    }
+    await this.render(summary, 'batched');
   }
 }

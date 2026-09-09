@@ -1,4 +1,5 @@
 import { ReactWidget } from '@jupyterlab/ui-components';
+import { ITranslator, nullTranslator } from '@jupyterlab/translation';
 import React, { useEffect, useRef, useState } from 'react';
 
 /**
@@ -27,6 +28,7 @@ export interface ITimeInputDialogOptions {
     label: string;
     caption?: string;
   };
+  translator?: ITranslator;
 }
 
 /**
@@ -49,6 +51,7 @@ interface ITimeInputProps {
   defaultUnit?: TimeUnit;
   initialInputValid?: boolean;
   checkboxLabel?: string;
+  translator?: ITranslator;
   onValidationChange?: (isValid: boolean) => void;
   onResultChange?: (result: ITimeInputResult) => void;
 }
@@ -63,9 +66,11 @@ const TimeInput: React.FC<ITimeInputProps> = ({
   defaultUnit = TimeUnit.SECONDS,
   initialInputValid = true,
   checkboxLabel,
+  translator,
   onValidationChange,
   onResultChange,
 }) => {
+  const trans = (translator ?? nullTranslator).load('jupyterlab-notify');
   useEffect(() => {
     if (!initialInputValid) {
       onValidationChange?.(false);
@@ -208,14 +213,14 @@ const TimeInput: React.FC<ITimeInputProps> = ({
           value={unit}
           onChange={e => handleUnitChange(e.target.value as TimeUnit)}
         >
-          <option value={TimeUnit.SECONDS}>Seconds (s)</option>
-          <option value={TimeUnit.MINUTES}>Minutes (m)</option>
-          <option value={TimeUnit.HOURS}>Hours (h)</option>
+          <option value={TimeUnit.SECONDS}>{trans.__('Seconds (s)')}</option>
+          <option value={TimeUnit.MINUTES}>{trans.__('Minutes (m)')}</option>
+          <option value={TimeUnit.HOURS}>{trans.__('Hours (h)')}</option>
         </select>
       </div>
       {!isValid && (
         <div className="jp-notify-time-input-error" role="alert">
-          Please enter a valid positive number
+          {trans.__('Please enter a valid positive number')}
         </div>
       )}
       {checkboxLabel && (
@@ -309,6 +314,7 @@ export class TimeInputWidget extends ReactWidget {
         defaultValue={this._options.defaultValue}
         defaultUnit={this._options.defaultUnit}
         initialInputValid={this._options.initialInputValid}
+        translator={this._options.translator}
         onValidationChange={this._handleValidationChange}
         onResultChange={this._handleResultChange}
         checkboxLabel={this._options.checkbox?.label}

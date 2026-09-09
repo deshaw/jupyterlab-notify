@@ -415,9 +415,13 @@ test('Custom-timeout notification does not include cell number before execution'
   await selectCellNotificationMode(page, 0, 'Never');
 
   await page.notebook.enterCellEditingMode(0);
-  await page.keyboard.type('import time; time.sleep(2)');
-  const runCellPromise = page.notebook.runCell(0);
+  await page.keyboard.type('import time; time.sleep(5)');
 
+  // Configure the second cell before running anything: going through the
+  // notification menu takes longer than the timeout under test, so doing it
+  // between the two executions lets the first cell finish first and the
+  // second one is no longer pending when its timeout expires.
+  await page.notebook.addCell('code', 'import time; time.sleep(1)');
   await selectCellNotificationMode(
     page,
     1,
@@ -427,17 +431,16 @@ test('Custom-timeout notification does not include cell number before execution'
     'seconds',
   );
 
-  await page.notebook.enterCellEditingMode(1);
-  await page.keyboard.type('import time; time.sleep(1)');
-  const runCellPromise2 = page.notebook.runCell(1);
+  // Queue both cells back to back, without waiting for either to finish, so
+  // the second one is still waiting on the kernel when its timeout expires.
+  await page.notebook.runCell(0, { wait: false });
+  await page.notebook.runCell(1, { wait: false });
   await page.waitForTimeout(1500); // Wait for timeout
 
   const notifications = await page.evaluate(() => window.mockNotifications);
   expect(notifications.length).toBeGreaterThan(0);
   expect(notifications[0].title).toBe('test: Cell execution timeout reached');
   expect(notifications[0].body).toMatch('Timed out before execution');
-  await runCellPromise2.catch(() => {});
-  await runCellPromise.catch(() => {});
 });
 
 test('Displays warning when email is enabled but not configured', async ({
