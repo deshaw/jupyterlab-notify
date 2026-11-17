@@ -187,3 +187,26 @@ test('Multiple sequential timeout changes update correctly', async ({
   metadata = await openNotebookMetadata(page);
   await expect(metadata).toContainText('"defaultThreshold": "1h"');
 });
+
+test('Clicking the notify toolbar buttons again closes their menus', async ({
+  page,
+}) => {
+  await createNewNotebook(page, 'test.ipynb');
+  await page.sidebar.close('left');
+  const menu = page.locator('.lm-Menu.jp-notify-menu');
+
+  const toolbar = await page.notebook.getToolbarLocator();
+  const notebookButton = toolbar!.locator('[data-jp-item-name="notifyType"]');
+  await notebookButton.click();
+  await expect(menu).toBeVisible();
+  await notebookButton.click();
+  await expect(menu).toBeHidden();
+
+  await page.notebook.enterCellEditingMode(0);
+  const cell = await page.notebook.getCellLocator(0);
+  const cellButton = cell!.locator('[data-jp-item-name="cellNotifyMenu"]');
+  await cellButton.click();
+  await expect(menu).toBeVisible();
+  await cellButton.click();
+  await expect(menu).toBeHidden();
+});
